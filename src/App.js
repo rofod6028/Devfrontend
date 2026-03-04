@@ -466,15 +466,23 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName }) {
     setEditValue(item.현재수량);
   };
 
-  const handleSave = async (item, action) => {
-    try {
-      setIsSaving(true);
-      await axios.post(`${BASE_URL}/inventory/manual-update`, {
-        id: item.id,
-        현재수량: editValue,
-        action,
-        user: userName // ✨ 추가: 서버로 지금 작업자 이름을 보냅니다.
-      });
+  const handleSave = async (item) => { // action 파라미터 삭제
+  try {
+    setIsSaving(true);
+    await axios.post(`${BASE_URL}/inventory/manual-update`, {
+      id: item.id,
+      현재수량: editValue,
+      action: '수량변경', // 텍스트 고정
+      user: userName 
+    });
+    setEditingId(null);
+    await onUpdate();
+  } catch (err) {
+    alert('저장 실패: ' + err.message);
+  } finally {
+    setIsSaving(false);
+  }
+};
       setEditingId(null);
       await onUpdate(); // ✅ 데이터 새로고침
     } catch (err) {
@@ -568,20 +576,14 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName }) {
                     <button className="edit-btn-inc" onClick={() => setEditValue(editValue + 1)}>+</button>
                   </div>
                   <div className="edit-actions">
-                    <button
-                      className="edit-save-btn in"
-                      onClick={() => handleSave(item, '입고')}
-                      disabled={isSaving}
-                    >
-                      ✓ 입고
-                    </button>
-                    <button
-                      className="edit-save-btn out"
-                      onClick={() => handleSave(item, '출고')}
-                      disabled={isSaving}
-                    >
-                      ✓ 출고
-                    </button>
+                 <button
+  className="edit-save-btn"
+  style={{ backgroundColor: '#2563eb', color: 'white' }} 
+  onClick={() => handleSave(item)}
+  disabled={isSaving}
+>
+  ✓ 변경확인
+</button>
                     <button className="edit-cancel-btn" onClick={handleCancel} disabled={isSaving}>
                       ✕
                     </button>
