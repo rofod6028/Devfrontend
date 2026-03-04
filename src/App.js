@@ -466,23 +466,16 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName }) {
     setEditValue(item.현재수량);
   };
 
-  const handleSave = async (item) => { // action 파라미터 삭제
-  try {
-    setIsSaving(true);
-    await axios.post(`${BASE_URL}/inventory/manual-update`, {
-      id: item.id,
-      현재수량: editValue,
-      action: '수량변경', // 텍스트 고정
-      user: userName 
-    });
-    setEditingId(null);
-    await onUpdate();
-  } catch (err) {
-    alert('저장 실패: ' + err.message);
-  } finally {
-    setIsSaving(false);
-  }
-};
+  const handleSave = async (item) => {
+    try {
+      setIsSaving(true);
+      // 기존에 '입고', '출고'로 나뉘던 action을 '수량변경'으로 통합하여 보냅니다.
+      await axios.post(`${BASE_URL}/inventory/manual-update`, {
+        id: item.id,
+        현재수량: editValue,
+        action: '수량변경', 
+        user: userName 
+      });
       setEditingId(null);
       await onUpdate(); // ✅ 데이터 새로고침
     } catch (err) {
@@ -576,18 +569,23 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName }) {
                     <button className="edit-btn-inc" onClick={() => setEditValue(editValue + 1)}>+</button>
                   </div>
                   <div className="edit-actions">
-                 <button
-  className="edit-save-btn"
-  style={{ backgroundColor: '#2563eb', color: 'white' }} 
-  onClick={() => handleSave(item)}
-  disabled={isSaving}
->
-  ✓ 변경확인
-</button>
-                    <button className="edit-cancel-btn" onClick={handleCancel} disabled={isSaving}>
-                      ✕
-                    </button>
-                  </div>
+  <button
+    className="edit-save-btn"
+    style={{ backgroundColor: '#2563eb', color: 'white', padding: '8px 16px', borderRadius: '4px', border: 'none', cursor: 'pointer' }}
+    onClick={() => handleSave(item)}
+    disabled={isSaving}
+  >
+    {isSaving ? '저장 중...' : '✓ 변경확인'}
+  </button>
+  <button 
+    className="edit-cancel-btn" 
+    onClick={handleCancel} 
+    disabled={isSaving}
+    style={{ marginLeft: '8px' }}
+  >
+    ✕ 취소
+  </button>
+</div>
                 </div>
               ) : (
                 <button className="edit-trigger-btn" onClick={() => handleEdit(item)}>
