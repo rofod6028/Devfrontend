@@ -4,6 +4,16 @@ import './App.css';
 
 const BASE_URL = 'https://inventory-backend-2-6yqv.onrender.com/api';
 
+// ✨ 1. 사번 명단 정의 (App 함수 밖 상단에 배치)
+const USER_MAP = {
+  "225298": "김양섭",
+  "219153": "조재빈",
+  "223091": "이재성",
+  "226069": "강현준",
+  "219149": "가왕현"
+  // 필요한 만큼 사번: "이름" 형태로 추가하세요.
+};
+
 // ============================================================
 // 부품종류별 아이콘 (SVG)
 // ============================================================
@@ -118,23 +128,39 @@ function App() {
   
 
   // ✨ 알림 체크 (앱 시작 및 주기적)
-  useEffect(() => {
-// 앱이 켜지자마자 이름을 물어봅니다.
-const savedName = localStorage.getItem('inventory_user');
-if (savedName) {
-  setUserName(savedName);
-} else {
-  const inputName = prompt("성함을 입력해주세요 (재고 로그에 기록됩니다):", "홍길동");
-  const finalName = inputName || "미확인 사용자";
-  setUserName(finalName);
-  localStorage.setItem('inventory_user', finalName);
-}
+   useEffect(() => {
+    const savedName = localStorage.getItem('inventory_user');
+    
+    if (savedName && Object.values(USER_MAP).includes(savedName)) {
+      setUserName(savedName);
+    } else {
+      // ✨ 2. 사번 인증이 완료될 때까지 무한 반복 (보안 차단)
+      let authenticatedName = null;
+      
+      while (!authenticatedName) {
+        const inputId = prompt("🔑 보안 인증: 사번을 입력하세요.\n(등록된 사용자만 접속 가능합니다)");
+        
+        if (inputId === null) {
+          // 취소를 누르면 페이지를 하얗게 비우거나 경고창을 띄움
+          alert("인증 없이는 이용할 수 없습니다. 페이지를 새로고침하세요.");
+          document.body.innerHTML = "<h1 style='text-align:center; margin-top:200px;'>🔒 인증이 필요합니다.</h1>";
+          return;
+        }
+
+        if (USER_MAP[inputId]) {
+          authenticatedName = USER_MAP[inputId];
+          alert(`✅ 인증 성공: ${authenticatedName}님 환영합니다.`);
+        } else {
+          alert("❌ 등록되지 않은 사번입니다.");
+        }
+      }
+
+      setUserName(authenticatedName);
+      localStorage.setItem('inventory_user', authenticatedName);
+    }
+    
     loadCategories();
     loadAlerts();
-    
-    // 1분마다 알림 체크
-    const interval = setInterval(loadAlerts, 60000);
-    return () => clearInterval(interval);
   }, []);
 
   // ✨ 브라우저 알림 권한 요청
@@ -291,6 +317,11 @@ if (savedName) {
             </svg>
             <span>Smart Inventory</span>
           </button>
+          {/* ✨ 3. 현재 로그인 사용자 표시 */}
+          <div className="user-badge-main">
+            <span className="dot-online"></span>
+            {userName}님 접속 중
+          </div>
         </div>
         <div className="nav-right">
           {/* ✨ 알림 아이콘 */}
