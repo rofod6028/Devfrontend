@@ -104,6 +104,7 @@ const defaultIcon = (
 // ============================================================
 function App() {
   const [page, setPage] = useState('main');
+  const [highlightId, setHighlightId] = useState(null);
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [detailItems, setDetailItems] = useState([]);
@@ -114,6 +115,7 @@ function App() {
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [userName, setUserName] = useState('');
+  
 
   // ✨ 알림 체크 (앱 시작 및 주기적)
   useEffect(() => {
@@ -242,9 +244,13 @@ if (savedName) {
           <DetailPage
             items={detailItems}
             categoryName={selectedCategory}
-            onBack={() => setPage('main')}
+            onBack={() => {
+              setPage('main');
+              setHighlightId(null); // 뒤로 가기 할 때 강조 초기화
+            }}
             onUpdate={refreshData}
             userName={userName}
+            highlightId={highlightId} // ✨ DetailPage에 강조할 ID 전달
           />
         );
       case 'summary':
@@ -262,11 +268,12 @@ if (savedName) {
             searchResults={searchResults}
             isSearching={isSearching}
             onSearchResultClick={(item) => {
-  // ✨ 소분류가 아닌 '대분류' 이름을 전달하여 해당 카테고리 전체를 불러옵니다.
-  handleCategoryClick(item.대분류 || '기타'); 
-  setSearchResults([]);
-  setIsSearching(false);
-}}
+              // ✨ 검색 결과 클릭 시 해당 아이템의 ID를 저장하고 이동
+              setHighlightId(item.id); 
+              handleCategoryClick(item.대분류 || '기타'); 
+              setSearchResults([]);
+              setIsSearching(false);
+            }}
           />
         );
     }
@@ -456,10 +463,24 @@ function MainPage({ categories, onCategoryClick, onSummaryClick, alerts, onSearc
 // ============================================================
 // DetailPage (카테고리 클릭 후 리스트 + ✨ 수동 수정 UI)
 // ============================================================
-function DetailPage({ items, categoryName, onBack, onUpdate, userName }) { 
+function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlightId }) { 
   const [editingId, setEditingId] = useState(null);
   const [editValue, setEditValue] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
+
+  // ✨ [추가] 검색된 부품 위치로 부드럽게 자동 스크롤하는 효과
+  useEffect(() => {
+    if (highlightId) {
+      // 데이터가 렌더링될 시간을 조금 벌기 위해 0.1초 뒤 실행
+      const timer = setTimeout(() => {
+        const element = document.getElementById(`item-${highlightId}`);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [highlightId, items]);
 
   const handleEdit = (item) => {
     setEditingId(item.id);
@@ -469,7 +490,6 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName }) {
   const handleSave = async (item) => {
     try {
       setIsSaving(true);
-      // 기존에 '입고', '출고'로 나뉘던 action을 '수량변경'으로 통합하여 보냅니다.
       await axios.post(`${BASE_URL}/inventory/manual-update`, {
         id: item.id,
         현재수량: editValue,
@@ -477,13 +497,14 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName }) {
         user: userName 
       });
       setEditingId(null);
-      await onUpdate(); // ✅ 데이터 새로고침
+      await onUpdate(); 
     } catch (err) {
       alert('저장 실패: ' + err.message);
     } finally {
       setIsSaving(false);
     }
   };
+
 
   const handleCancel = () => {
     setEditingId(null);
@@ -510,9 +531,15 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName }) {
           const isLow = item.현재수량 <= item.최소보유수량;
           const stockPercent = Math.min((item.현재수량 / item.최소보유수량) * 100, 100);
           const isEditing = editingId === item.id;
+          const isHighlighted = item.id === highlightId;
 
           return (
-          <div key={item.id} className={`detail-card ${isLow ? 'low-stock' : ''}`}>
+            <div 
+              key={item.id} 
+              id={`item-${item.id}`} // ✨ [추가] 스크롤이 찾아올 수 있도록 ID 부여
+              // ✨ [변경] 강조 대상일 경우 'highlighted-card' 클래스 추가
+              className={`detail-card ${isHighlighted ? 'highlighted-card' : ''} ${isLow ? 'low-stock' : ''}`}
+            >
   <div className="detail-card-top">
   <div className="detail-model-wrapper">
     {/* ✨ 부품종류(소분류) 텍스트 태그 추가 */}

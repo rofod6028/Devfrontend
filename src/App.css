@@ -1416,3 +1416,10 @@ body {
     left: 10px;
   }
 }
+.highlighted-card {
+  border: 3px solid #2563eb !important; /* 파란색 테두리 */
+  background-color: #f0f7ff !important; /* 연한 파란색 배경 */
+  box-shadow: 0 0 15px rgba(37, 99, 235, 0.4);
+  transform: scale(1.02); /* 살짝 강조되는 크기 */
+  transition: all 0.4s ease;
+}
