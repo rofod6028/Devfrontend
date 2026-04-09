@@ -125,6 +125,9 @@ function App() {
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [userName, setUserName] = useState('');
+  const [inventoryData, setInventoryData] = useState([]);
+  const [selectedSheet, setSelectedSheet] = useState(null);
+  const [facilities, setFacilities] = useState([]);
   
 
   // ✨ 알림 체크 (앱 시작 및 주기적)
@@ -161,32 +164,33 @@ function App() {
     
     loadCategories();
     loadAlerts();
-    // 1. 메인에서 공정(시트) 클릭 시 실행
-const handleSheetClick = (sheetName) => {
-  setSelectedSheet(sheetName);
-  
-  // 전체 데이터에서 해당 시트 데이터만 필터링
-  const sheetItems = inventoryData.filter(item => item.원본시트 === sheetName);
-  
-  // 해당 시트 내의 '적용설비' 중복 제거하여 추출
-  const uniqueFacilities = [...new Set(sheetItems.map(item => item.적용설비))];
-  
-  setFacilities(uniqueFacilities);
-  setPage('facility'); // 설비 선택 페이지로 이동
-};
-
-// 2. 설비 페이지에서 특정 설비 클릭 시 실행
-const handleFacilityClick = (facilityName) => {
-  // 해당 공정 + 해당 설비 조건에 맞는 부품만 필터링
-  const filteredItems = inventoryData.filter(item => 
-    item.원본시트 === selectedSheet && item.적용설비 === facilityName
-  );
-  
-  setDetailItems(filteredItems); 
-  setSelectedCategory(facilityName); // 상세페이지 제목으로 표시
-  setPage('detail'); // 부품 리스트(상세) 페이지로 이동
-};
   }, []);
+
+  // 1. 메인에서 공정(시트) 클릭 시 실행
+  const handleSheetClick = (sheetName) => {
+    setSelectedSheet(sheetName);
+    
+    // 전체 데이터에서 해당 시트 데이터만 필터링
+    const sheetItems = inventoryData.filter(item => item.원본시트 === sheetName);
+    
+    // 해당 시트 내의 '적용설비' 중복 제거하여 추출
+    const uniqueFacilities = [...new Set(sheetItems.map(item => item.적용설비))];
+    
+    setFacilities(uniqueFacilities);
+    setPage('facility'); // 설비 선택 페이지로 이동
+  };
+
+  // 2. 설비 페이지에서 특정 설비 클릭 시 실행
+  const handleFacilityClick = (facilityName) => {
+    // 해당 공정 + 해당 설비 조건에 맞는 부품만 필터링
+    const filteredItems = inventoryData.filter(item => 
+      item.원본시트 === selectedSheet && item.적용설비 === facilityName
+    );
+    
+    setDetailItems(filteredItems); 
+    setSelectedCategory(facilityName); // 상세페이지 제목으로 표시
+    setPage('detail'); // 부품 리스트(상세) 페이지로 이동
+  };
 
   // ✨ 브라우저 알림 권한 요청
   useEffect(() => {
@@ -600,10 +604,6 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
   const [editingId, setEditingId] = useState(null);
   const [editValue, setEditValue] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
-const [inventoryData, setInventoryData] = useState([]); // 전체 재고 리스트
-const [selectedSheet, setSelectedSheet] = useState(null); // 현재 선택된 공정 (충전, 타정 등)
-const [facilities, setFacilities] = useState([]); // 선택된 공정 내의 설비 리스트
-
 
   // ✨ [추가] 검색된 부품 위치로 부드럽게 자동 스크롤하는 효과
   useEffect(() => {
