@@ -5,7 +5,7 @@ const XLSX = require('xlsx');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
@@ -13,7 +13,11 @@ app.use(express.json());
 // ============================================================
 // Gemini AI 설정
 // ============================================================
-const genAI = new GoogleGenerativeAI('AIzaSyDulQlx2CxbO5foZIFyghq25UpQhrod-Qw');
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+if (!GEMINI_API_KEY) {
+  console.warn('⚠️ 경고: GEMINI_API_KEY 환경변수가 설정되지 않았습니다');
+}
+const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
 // ============================================================
