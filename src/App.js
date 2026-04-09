@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './App.css';
 
-const BASE_URL = 'https://inventory-backend-2-6yqv.onrender.com/api';
+const BASE_URL = 'https://devbackend-i7t6.onrender.com/api';
 
 // ✨ 1. 사번 명단 정의 (App 함수 밖 상단에 배치)
 const USER_MAP = {
