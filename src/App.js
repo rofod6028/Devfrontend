@@ -161,6 +161,31 @@ function App() {
     
     loadCategories();
     loadAlerts();
+    // 1. 메인에서 공정(시트) 클릭 시 실행
+const handleSheetClick = (sheetName) => {
+  setSelectedSheet(sheetName);
+  
+  // 전체 데이터에서 해당 시트 데이터만 필터링
+  const sheetItems = inventoryData.filter(item => item.원본시트 === sheetName);
+  
+  // 해당 시트 내의 '적용설비' 중복 제거하여 추출
+  const uniqueFacilities = [...new Set(sheetItems.map(item => item.적용설비))];
+  
+  setFacilities(uniqueFacilities);
+  setPage('facility'); // 설비 선택 페이지로 이동
+};
+
+// 2. 설비 페이지에서 특정 설비 클릭 시 실행
+const handleFacilityClick = (facilityName) => {
+  // 해당 공정 + 해당 설비 조건에 맞는 부품만 필터링
+  const filteredItems = inventoryData.filter(item => 
+    item.원본시트 === selectedSheet && item.적용설비 === facilityName
+  );
+  
+  setDetailItems(filteredItems); 
+  setSelectedCategory(facilityName); // 상세페이지 제목으로 표시
+  setPage('detail'); // 부품 리스트(상세) 페이지로 이동
+};
   }, []);
 
   // ✨ 브라우저 알림 권한 요청
@@ -171,17 +196,22 @@ function App() {
   }, []);
 
   async function loadCategories() {
-    try {
-      setLoading(true);
-      const res = await axios.get(`${BASE_URL}/inventory/categories`);
-      setCategories(res.data.data);
-    } catch (err) {
-      setError('데이터를 로드하는 데 문제가 있습니다.');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+  try {
+    setLoading(true);
+    // 💡 변경: 가공된 카테고리가 아니라 전체 리스트(/inventory)를 가져옵니다.
+    const res = await axios.get(`${BASE_URL}/inventory`); 
+    const allData = res.data.data;
+    
+    setInventoryData(allData); // 전체 데이터 저장
+    
+    // (기존 요약 기능 등을 위해 필요하다면 아래처럼 활용 가능)
+    // setCategories(res.data.categories); 
+  } catch (err) {
+    setError('데이터 로드 실패');
+  } finally {
+    setLoading(false);
   }
+}
 
   // ✨ 알림 로드 및 브라우저 푸시
   async function loadAlerts() {
@@ -262,43 +292,66 @@ function App() {
   }
 
   const renderPage = () => {
-    if (loading) return <div className="loading-spinner"><div className="spinner"></div><p>로드 중...</p></div>;
+  if (loading) return <div className="loading-spinner"><div className="spinner"></div><p>로드 중...</p></div>;
 
-    switch (page) {
-      case 'detail':
-        return (
-          <DetailPage
-            items={detailItems}
-            categoryName={selectedCategory}
-            onBack={() => {
-              setPage('main');
-              setHighlightId(null); // 뒤로 가기 할 때 강조 초기화
-            }}
-            onUpdate={refreshData}
-            userName={userName}
-            highlightId={highlightId} // ✨ DetailPage에 강조할 ID 전달
-          />
-        );
-      case 'summary':
-        return <SummaryPage summary={summary} onBack={() => setPage('main')} />;
-      case 'logs':
-        return <LogsPage onBack={() => setPage('main')} />;
-      default:
+  switch (page) {
+    case 'detail': // 3단계: 특정 설비의 부품 리스트 및 수정
+      return (
+        <DetailPage
+          items={detailItems}
+          categoryName={selectedCategory} // 이제 '설비명'이 될 것입니다.
+          onBack={() => setPage('facility')} // 뒤로가기 시 설비 선택 화면으로
+          onUpdate={refreshData}
+          userName={userName}
+          highlightId={highlightId}
+        />
+      );
+
+    case 'facility': // 2단계: 공정 내의 '적용설비' 리스트 선택 화면
+      return (
+        <FacilityPage
+          selectedSheet={selectedSheet} // 선택된 공정 (충전/타정 등)
+          items={categories.filter(item => item.원본시트 === selectedSheet)} // 해당 공정 데이터만
+          onFacilityClick={handleFacilityClick}
+          onBack={() => setPage('main')} // 뒤로가기 시 공정 선택(Main)으로
+        />
+      );
+
+    case 'summary':
+      return <SummaryPage summary={summary} onBack={() => setPage('main')} />;
+    
+    case 'logs':
+      return <LogsPage onBack={() => setPage('main')} />;
+
+    default: // 1단계: 메인화면 (공정 선택)
         return (
           <MainPage
-            categories={categories}
-            onCategoryClick={handleCategoryClick}
+            onSheetClick={(sheetName) => {
+              setSelectedSheet(sheetName);
+              // ✨ [로직 추가] 선택한 공정(시트)에 해당하는 설비들만 중복 없이 추출
+              const sheetItems = inventoryData.filter(item => item.원본시트 === sheetName);
+              const uniqueFacilities = [...new Set(sheetItems.map(item => item.적용설비))];
+              setFacilities(uniqueFacilities); 
+              setPage('facility'); 
+            }}
             onSummaryClick={loadSummary}
             alerts={alerts}
             onSearch={handleSearch}
             searchResults={searchResults}
             isSearching={isSearching}
             onSearchResultClick={(item) => {
-  setHighlightId(item.id); // ✨ 클릭한 아이템의 ID를 먼저 저장 (추가)
-  handleCategoryClick(item.대분류 || '기타'); 
-  setSearchResults([]);
-  setIsSearching(false);
-}}
+              setHighlightId(item.id);
+              // 검색 결과 클릭 시 해당 아이템의 상세 정보로 바로 이동하는 로직
+              const filtered = inventoryData.filter(d => 
+                d.원본시트 === item.원본시트 && d.적용설비 === item.적용설비
+              );
+              setDetailItems(filtered);
+              setSelectedSheet(item.원본시트);
+              setSelectedCategory(item.적용설비);
+              setPage('detail');
+              setSearchResults([]);
+              setIsSearching(false);
+            }}
           />
         );
     }
@@ -365,11 +418,45 @@ function App() {
   );
 }
 
-// ============================================================
-// MainPage (메인 화면 — 카테고리 아이콘 그리드 + 검색)
-// ============================================================
-function MainPage({ categories, onCategoryClick, onSummaryClick, alerts, onSearch, searchResults, isSearching, onSearchResultClick }) {
+const processIcons = {
+  '충전': (
+    <svg viewBox="0 0 48 48" width="48" height="48" fill="none" stroke="#e11d48" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M16 42h16V18L24 6l-8 12v24z" />
+      <path d="M16 18h16" /><path d="M20 18v-4a4 4 0 0 1 8 0v4" />
+      <rect x="14" y="32" width="20" height="10" rx="1" />
+    </svg>
+  ),
+  '타정': (
+    <svg viewBox="0 0 48 48" width="48" height="48" fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="24" cy="24" r="18" /><circle cx="24" cy="24" r="12" strokeDasharray="3 3" />
+      <path d="M12 24h24M24 12v24" strokeOpacity="0.3" /><path d="M7 7l4 4M37 37l4 4" />
+    </svg>
+  ),
+  '제조': (
+    <svg viewBox="0 0 48 48" width="48" height="48" fill="none" stroke="#059669" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10 10v20c0 5 6 8 14 8s14-3 14-8V10" />
+      <path d="M10 15c0 3 6 5 14 5s14-2 14-5" /><path d="M24 20v12" />
+      <path d="M18 32h12M20 28h8" /><path d="M8 8h32" />
+    </svg>
+  ),
+  '공통': (
+    <svg viewBox="0 0 48 48" width="48" height="48" fill="none" stroke="#4b5563" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 14l18-8 18 8v20l-18 8-18-8V14z" />
+      <path d="M6 14l18 8 18-8M24 22v20" />
+    </svg>
+  )
+};
+
+// 2. 컴포넌트 시작 (onSheetClick으로 변경)
+function MainPage({ onSheetClick, onSummaryClick, alerts, onSearch, searchResults, isSearching, onSearchResultClick }) {
   const [searchQuery, setSearchQuery] = useState('');
+
+  const processSheets = [
+    { name: '충전', desc: '립스틱 / 틴트' },
+    { name: '타정', desc: '파우더 / 팩트' },
+    { name: '제조', desc: '원료 배합 / 탱크' },
+    { name: '공통', desc: '공용 및 기타' }
+  ];
 
   const handleSearchChange = (e) => {
     const query = e.target.value;
@@ -381,20 +468,19 @@ function MainPage({ categories, onCategoryClick, onSummaryClick, alerts, onSearc
     <div className="main-page">
       <div className="page-header">
         <h1>스페어파츠 재고 관리</h1>
-        <p className="page-subtitle">부품종류를 클릭하여 상세 재고를 확인하세요</p>
+        <p className="page-subtitle">생산 공정을 선택하여 설비별 재고를 확인하세요</p>
       </div>
 
-      {/* ✨ 검색 바 */}
+      {/* ✨ 검색 바 (기존 유지) */}
       <div className="search-container">
         <div className="search-input-wrap">
           <svg className="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8"/>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
           <input
             type="text"
             className="search-input"
-            placeholder="모델명, 부품종류, 적용설비 검색..."
+            placeholder="모델명, 적용설비 검색..."
             value={searchQuery}
             onChange={handleSearchChange}
           />
@@ -403,18 +489,13 @@ function MainPage({ categories, onCategoryClick, onSummaryClick, alerts, onSearc
           )}
         </div>
 
-        {/* 검색 결과 드롭다운 */}
         {isSearching && searchResults.length > 0 && (
           <div className="search-results">
             {searchResults.map(item => (
               <div key={item.id} className="search-result-item" onClick={() => { onSearchResultClick(item); setSearchQuery(''); }}>
                 <div className="search-result-top">
-                  <span className="search-result-category">
-  {item.대분류} <small>({item.부품종류})</small> {/* ✨ 대분류와 소분류 함께 표시 */}
-</span>
-                  <span className={`search-result-qty ${item.현재수량 <= item.최소보유수량 ? 'low' : ''}`}>
-                    {item.현재수량}개
-                  </span>
+                  <span className="search-result-category">[{item.원본시트}] {item.부품종류}</span>
+                  <span className={`search-result-qty ${item.현재수량 <= item.최소보유수량 ? 'low' : ''}`}>{item.현재수량}개</span>
                 </div>
                 <div className="search-result-model">{item.모델명}</div>
                 <div className="search-result-facility">{item.적용설비}</div>
@@ -422,64 +503,87 @@ function MainPage({ categories, onCategoryClick, onSummaryClick, alerts, onSearc
             ))}
           </div>
         )}
-        {isSearching && searchResults.length === 0 && searchQuery.length >= 2 && (
-          <div className="search-results">
-            <div className="search-no-result">검색 결과가 없습니다</div>
-          </div>
-        )}
       </div>
 
-      {/* ✨ 긴급 알림 배너 */}
+      {/* ✨ 긴급 알림 배너 (기존 유지) */}
       {alerts.filter(a => a.최소보유수량 > 0 && a.긴급도 === 'critical').length > 0 && (
-  <div className="alert-banner critical">
+        <div className="alert-banner critical">
           <div className="alert-banner-icon">🚨</div>
-          <div className="alert-banner-text">
-            <strong>긴급!</strong> {alerts.filter(a => a.긴급도 === 'critical').length}개 품목 재고 소진
-          </div>
+          <div className="alert-banner-text"><strong>긴급!</strong> {alerts.filter(a => a.긴급도 === 'critical').length}개 품목 재고 소진</div>
           <button className="alert-banner-btn" onClick={onSummaryClick}>확인</button>
         </div>
       )}
 
-      {/* 카테고리 아이콘 그리드 */}
+      {/* ✨ 공정 버튼 그리드 (카테고리 대신 공정으로 변경) */}
       <div className="category-grid">
-        {categories.map((cat) => {
-          const hasLowStock = cat.lowStockCount > 0;
+        {processSheets.map((sheet) => (
+          <button
+            key={sheet.name}
+            className="category-card"
+            onClick={() => onSheetClick(sheet.name)}
+          >
+            <div className="category-icon-wrap">
+              {processIcons[sheet.name]}
+            </div>
+            <div className="category-label">{sheet.name}</div>
+            <div className="category-meta">
+              <span className="category-count">{sheet.desc}</span>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+// ============================================================
+// FacilityPage (2단계 — 공정 내 설비 리스트 선택)
+// ============================================================
+function FacilityPage({ selectedSheet, facilities, onFacilityClick, onBack, inventoryData }) {
+  return (
+    <div className="facility-page">
+      <div className="detail-header">
+        <button className="back-btn" onClick={onBack}>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12,19 5,12 12,5" />
+          </svg>
+          공정 선택으로
+        </button>
+        <div className="detail-category-header">
+          <h2 className="main-cat-title">{selectedSheet} 공정</h2>
+          <span className="sub-cat-badge">설비를 선택하세요</span>
+        </div>
+      </div>
+
+      <div className="category-grid" style={{ marginTop: '20px' }}>
+        {facilities.map((facility) => {
+          // 해당 설비의 전체 부품 추출
+          const facilityItems = inventoryData.filter(item => 
+            item.원본시트 === selectedSheet && item.적용설비 === facility
+          );
+          // 재고 부족 항목 계산
+          const lowStockCount = facilityItems.filter(item => 
+            item.최소보유수량 > 0 && item.현재수량 <= item.최소보유수량
+          ).length;
+
           return (
             <button
-              key={cat.name}
-              className={`category-card ${hasLowStock ? 'has-low-stock' : ''}`}
-              onClick={() => onCategoryClick(cat.name)}
+              key={facility}
+              className={`category-card ${lowStockCount > 0 ? 'has-low-stock' : ''}`}
+              onClick={() => onFacilityClick(facility)}
+              style={{ minHeight: '140px' }}
             >
-              <div className="category-icon-wrap">
-  {/* ✨ 대분류 이름에 따라 실시간으로 아이콘 매칭 */}
-  {(() => {
-    switch (cat.name) {
-      case '솔밸브류':
-        return <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 12h24v24H12zM24 8v4M24 36v4M8 24h4M36 24h4M18 24h12M24 18v12"/></svg>;
-      case '실린더류':
-        return <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="10" y="20" width="20" height="8" rx="1"/><rect x="30" y="16" width="4" height="16"/><path d="M40 24h-6M10 24H4"/></svg>;
-      case '모터류':
-        return <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="24" cy="24" r="14"/><circle cx="24" cy="24" r="4"/><path d="M24 10v4M24 34v4M10 24h4M34 24h4"/></svg>;
-      case '계장부품류':
-        return <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M10 38a14 14 0 1 1 28 0M24 38V20l8 4"/><circle cx="24" cy="38" r="2" fill="currentColor"/></svg>;
-      case '릴레이류':
-        return <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="14" y="10" width="20" height="28" rx="2"/><path d="M14 18h20M14 28h20M20 10v28"/></svg>;
-      case '히터류':
-        return <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 10v24c0 4 8 4 8 0V10c0-4 8-4 8 0v24c0 4 8 4 8 0V10M10 40h28"/></svg>;
-      case '베어링류':
-        return <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="24" cy="24" r="18"/><circle cx="24" cy="24" r="6"/><circle cx="24" cy="10" r="2" fill="currentColor"/><circle cx="38" cy="24" r="2" fill="currentColor"/><circle cx="24" cy="38" r="2" fill="currentColor"/><circle cx="10" cy="24" r="2" fill="currentColor"/></svg>;
-      case '기타':
-        return <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="8" y="8" width="32" height="32" rx="4"/><path d="M8 20h32M20 8v32"/></svg>;
-      default:
-        return defaultIcon;
-    }
-  })()}
-</div>
-<div className="category-label">{cat.name}</div>
+              <div className="category-icon-wrap" style={{ background: '#f0f9ff' }}>
+                <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="#0ea5e9" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 36v-6l6-10h24l6 10v6H6zM14 20V10l10-4 10 4v10" />
+                  <circle cx="16" cy="30" r="2" fill="currentColor" />
+                  <circle cx="32" cy="30" r="2" fill="currentColor" />
+                </svg>
+              </div>
+              <div className="category-label" style={{ fontSize: '1.1rem' }}>{facility}</div>
               <div className="category-meta">
-                <span className="category-count">{cat.itemCount}종</span>
-                {hasLowStock && (
-                  <span className="low-stock-badge">⚠ {cat.lowStockCount}</span>
+                <span className="category-count">{facilityItems.length}개 품목</span>
+                {lowStockCount > 0 && (
+                  <span className="low-stock-badge">⚠️ {lowStockCount}</span>
                 )}
               </div>
             </button>
@@ -489,7 +593,6 @@ function MainPage({ categories, onCategoryClick, onSummaryClick, alerts, onSearc
     </div>
   );
 }
-
 // ============================================================
 // DetailPage (카테고리 클릭 후 리스트 + ✨ 수동 수정 UI)
 // ============================================================
@@ -497,6 +600,10 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
   const [editingId, setEditingId] = useState(null);
   const [editValue, setEditValue] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
+const [inventoryData, setInventoryData] = useState([]); // 전체 재고 리스트
+const [selectedSheet, setSelectedSheet] = useState(null); // 현재 선택된 공정 (충전, 타정 등)
+const [facilities, setFacilities] = useState([]); // 선택된 공정 내의 설비 리스트
+
 
   // ✨ [추가] 검색된 부품 위치로 부드럽게 자동 스크롤하는 효과
   useEffect(() => {
