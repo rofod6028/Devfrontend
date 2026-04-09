@@ -168,13 +168,19 @@ function App() {
 
   // 1. 메인에서 공정(시트) 클릭 시 실행
   const handleSheetClick = (sheetName) => {
+    console.log(`🔍 시트 클릭: ${sheetName}`);
+    console.log(`   inventoryData 크기: ${inventoryData.length}건`);
+    console.log(`   전체 데이터:`, inventoryData);
+    
     setSelectedSheet(sheetName);
     
     // 전체 데이터에서 해당 시트 데이터만 필터링
     const sheetItems = inventoryData.filter(item => item.원본시트 === sheetName);
+    console.log(`   "${sheetName}" 필터링 결과: ${sheetItems.length}건`, sheetItems);
     
     // 해당 시트 내의 '적용설비' 중복 제거하여 추출
     const uniqueFacilities = [...new Set(sheetItems.map(item => item.적용설비))];
+    console.log(`   추출된 설비: ${uniqueFacilities.length}개`, uniqueFacilities);
     
     setFacilities(uniqueFacilities);
     setPage('facility'); // 설비 선택 페이지로 이동
@@ -202,15 +208,25 @@ function App() {
   async function loadCategories() {
   try {
     setLoading(true);
+    console.log('📡 /api/inventory 데이터 로드 중...');
     // 💡 변경: 가공된 카테고리가 아니라 전체 리스트(/inventory)를 가져옵니다.
     const res = await axios.get(`${BASE_URL}/inventory`); 
     const allData = res.data.data;
+    
+    console.log(`✅ /api/inventory 응답 받음: ${allData.length}건`);
+    console.log('   응답 데이터:');
+    allData.slice(0, 3).forEach(item => {
+      console.log(`   - ${item.원본시트} / ${item.부품종류} / ${item.모델명}`);
+    });
     
     setInventoryData(allData); // 전체 데이터 저장
     
     // (기존 요약 기능 등을 위해 필요하다면 아래처럼 활용 가능)
     // setCategories(res.data.categories); 
   } catch (err) {
+    console.error('❌ 데이터 로드 실패:', err.message);
+    console.error('   백엔드 URL:', BASE_URL);
+    console.error('   전체 에러:', err);
     setError('데이터 로드 실패');
   } finally {
     setLoading(false);
