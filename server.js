@@ -267,10 +267,24 @@ ${JSON.stringify(inventoryData, null, 2)}
 });
 
 // ============================================================
+// React 정적 파일 제공 (프로덕션)
+// ============================================================
+const path = require('path');
+
+// React build 폴더의 정적 파일 제공
+app.use(express.static(path.join(__dirname, 'build')));
+
+// React Router를 위한 catch-all 라우트
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'build', 'index.html'));
+});
+
+// ============================================================
 // 서버 시작
 // ============================================================
-app.listen(PORT, () => {
-  console.log(`\n🚀 백엔드 서버 실행 중: http://localhost:${PORT}`);
+const PORT_ENV = process.env.PORT || PORT;
+app.listen(PORT_ENV, () => {
+  console.log(`\n🚀 백엔드 서버 실행 중: http://localhost:${PORT_ENV}`);
   console.log(`📋 API 엔드포인트:`);
   console.log(`   GET  /api/inventory          - 전체 재고`);
   console.log(`   GET  /api/inventory/categories - 종류별 그룹`);
