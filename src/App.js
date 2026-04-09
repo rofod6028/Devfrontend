@@ -236,7 +236,9 @@ function App() {
         }
       }
     } catch (err) {
-      console.error('알림 로드 실패:', err);
+      // ⚠️ 알림 엔드포인트가 없으면 무시 (임시 처리)
+      console.warn('알림 시스템 미사용 중:', err.message);
+      setAlerts([]);
     }
   }
 
