@@ -561,40 +561,46 @@ function FacilityPage({ selectedSheet, facilities, onFacilityClick, onBack, inve
       </div>
 
       <div className="category-grid" style={{ marginTop: '20px' }}>
-        {facilities.map((facility) => {
-          // 해당 설비의 전체 부품 추출
-          const facilityItems = inventoryData.filter(item => 
-            item.원본시트 === selectedSheet && item.적용설비 === facility
-          );
-          // 재고 부족 항목 계산
-          const lowStockCount = facilityItems.filter(item => 
-            item.최소보유수량 > 0 && item.현재수량 <= item.최소보유수량
-          ).length;
+        {facilities && facilities.length > 0 ? (
+          facilities.map((facility) => {
+            // 해당 설비의 전체 부품 추출
+            const facilityItems = inventoryData.filter(item => 
+              item.원본시트 === selectedSheet && item.적용설비 === facility
+            );
+            // 재고 부족 항목 계산
+            const lowStockCount = facilityItems.filter(item => 
+              item.최소보유수량 > 0 && item.현재수량 <= item.최소보유수량
+            ).length;
 
-          return (
-            <button
-              key={facility}
-              className={`category-card ${lowStockCount > 0 ? 'has-low-stock' : ''}`}
-              onClick={() => onFacilityClick(facility)}
-              style={{ minHeight: '140px' }}
-            >
-              <div className="category-icon-wrap" style={{ background: '#f0f9ff' }}>
-                <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="#0ea5e9" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M6 36v-6l6-10h24l6 10v6H6zM14 20V10l10-4 10 4v10" />
-                  <circle cx="16" cy="30" r="2" fill="currentColor" />
-                  <circle cx="32" cy="30" r="2" fill="currentColor" />
-                </svg>
-              </div>
-              <div className="category-label" style={{ fontSize: '1.1rem' }}>{facility}</div>
-              <div className="category-meta">
-                <span className="category-count">{facilityItems.length}개 품목</span>
-                {lowStockCount > 0 && (
-                  <span className="low-stock-badge">⚠️ {lowStockCount}</span>
-                )}
-              </div>
-            </button>
-          );
-        })}
+            return (
+              <button
+                key={facility}
+                className={`category-card ${lowStockCount > 0 ? 'has-low-stock' : ''}`}
+                onClick={() => onFacilityClick(facility)}
+                style={{ minHeight: '140px' }}
+              >
+                <div className="category-icon-wrap" style={{ background: '#f0f9ff' }}>
+                  <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="#0ea5e9" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M6 36v-6l6-10h24l6 10v6H6zM14 20V10l10-4 10 4v10" />
+                    <circle cx="16" cy="30" r="2" fill="currentColor" />
+                    <circle cx="32" cy="30" r="2" fill="currentColor" />
+                  </svg>
+                </div>
+                <div className="category-label" style={{ fontSize: '1.1rem' }}>{facility}</div>
+                <div className="category-meta">
+                  <span className="category-count">{facilityItems.length}개 품목</span>
+                  {lowStockCount > 0 && (
+                    <span className="low-stock-badge">⚠️ {lowStockCount}</span>
+                  )}
+                </div>
+              </button>
+            );
+          })
+        ) : (
+          <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '20px', color: '#666' }}>
+            <p>⚠️ 설정된 설비가 없습니다</p>
+          </div>
+        )}
       </div>
     </div>
   );
