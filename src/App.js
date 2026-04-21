@@ -332,10 +332,11 @@ function App() {
     case 'facility': // 2단계: 공정 내의 '적용설비' 리스트 선택 화면
       return (
         <FacilityPage
-          selectedSheet={selectedSheet} // 선택된 공정 (충전/타정 등)
-          items={categories.filter(item => item.원본시트 === selectedSheet)} // 해당 공정 데이터만
+          selectedSheet={selectedSheet}
+          facilities={facilities}
+          inventoryData={inventoryData}
           onFacilityClick={handleFacilityClick}
-          onBack={() => setPage('main')} // 뒤로가기 시 공정 선택(Main)으로
+          onBack={() => setPage('main')}
         />
       );
 
