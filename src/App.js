@@ -305,11 +305,15 @@ function App() {
 
   // ✨ 재고 업데이트 후 데이터 새로고침
   async function refreshData() {
-    await loadCategories();
+    const res = await axios.get(`${BASE_URL}/inventory`);
+    const allData = res.data.data;
+    setInventoryData(allData);
     await loadAlerts();
-    if (page === 'detail' && selectedCategory) {
-      const res = await axios.get(`${BASE_URL}/inventory/category/${encodeURIComponent(selectedCategory)}`);
-      setDetailItems(res.data.data);
+    if (page === 'detail' && selectedSheet && selectedCategory) {
+      const filtered = allData.filter(item =>
+        item.원본시트 === selectedSheet && item.적용설비 === selectedCategory
+      );
+      setDetailItems(filtered);
     }
   }
 
@@ -443,29 +447,77 @@ function App() {
 
 const processIcons = {
   '충전': (
-    <svg viewBox="0 0 48 48" width="48" height="48" fill="none" stroke="#e11d48" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M16 42h16V18L24 6l-8 12v24z" />
-      <path d="M16 18h16" /><path d="M20 18v-4a4 4 0 0 1 8 0v4" />
-      <rect x="14" y="32" width="20" height="10" rx="1" />
+    <svg viewBox="0 0 64 64" width="52" height="52" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="64" height="64" rx="16" fill="#fff0f3"/>
+      {/* 립스틱 튜브 본체 */}
+      <rect x="22" y="28" width="20" height="22" rx="3" fill="#f43f5e" opacity="0.15" stroke="#f43f5e" strokeWidth="2"/>
+      {/* 립스틱 상단 불릿 */}
+      <path d="M26 28 Q32 18 38 28" fill="#f43f5e" stroke="#f43f5e" strokeWidth="1.5" strokeLinejoin="round"/>
+      {/* 튜브 나사선 */}
+      <line x1="22" y1="34" x2="42" y2="34" stroke="#f43f5e" strokeWidth="1.5" strokeDasharray="3 2"/>
+      {/* 충전 번개 아이콘 */}
+      <path d="M29 42 L33 36 L31 36 L35 30 L27 38 L30 38 Z" fill="#f43f5e" stroke="none"/>
     </svg>
   ),
   '타정': (
-    <svg viewBox="0 0 48 48" width="48" height="48" fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="24" cy="24" r="18" /><circle cx="24" cy="24" r="12" strokeDasharray="3 3" />
-      <path d="M12 24h24M24 12v24" strokeOpacity="0.3" /><path d="M7 7l4 4M37 37l4 4" />
+    <svg viewBox="0 0 64 64" width="52" height="52" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="64" height="64" rx="16" fill="#eff6ff"/>
+      {/* 타정기 프레스 상단 */}
+      <rect x="20" y="14" width="24" height="8" rx="3" fill="#2563eb" opacity="0.8"/>
+      {/* 프레스 기둥 */}
+      <rect x="29" y="22" width="6" height="10" rx="1" fill="#2563eb" opacity="0.6"/>
+      {/* 파우더/팩트 원형 */}
+      <ellipse cx="32" cy="40" rx="12" ry="5" fill="#2563eb" opacity="0.15" stroke="#2563eb" strokeWidth="2"/>
+      <ellipse cx="32" cy="40" rx="7" ry="3" fill="#2563eb" opacity="0.3"/>
+      {/* 압축 화살표 */}
+      <path d="M20 32 L20 36 M24 30 L24 36 M44 32 L44 36 M40 30 L40 36" stroke="#2563eb" strokeWidth="2" strokeLinecap="round"/>
     </svg>
   ),
   '제조': (
-    <svg viewBox="0 0 48 48" width="48" height="48" fill="none" stroke="#059669" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M10 10v20c0 5 6 8 14 8s14-3 14-8V10" />
-      <path d="M10 15c0 3 6 5 14 5s14-2 14-5" /><path d="M24 20v12" />
-      <path d="M18 32h12M20 28h8" /><path d="M8 8h32" />
+    <svg viewBox="0 0 64 64" width="52" height="52" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="64" height="64" rx="16" fill="#f0fdf4"/>
+      {/* 믹싱 탱크 */}
+      <path d="M16 24 Q16 44 32 46 Q48 44 48 24 L44 18 H20 Z" fill="#16a34a" opacity="0.12" stroke="#16a34a" strokeWidth="2" strokeLinejoin="round"/>
+      {/* 탱크 상단 뚜껑 */}
+      <ellipse cx="32" cy="18" rx="12" ry="4" fill="#16a34a" opacity="0.25" stroke="#16a34a" strokeWidth="1.5"/>
+      {/* 교반기 축 */}
+      <line x1="32" y1="18" x2="32" y2="38" stroke="#16a34a" strokeWidth="2" strokeLinecap="round"/>
+      {/* 교반 날개 */}
+      <path d="M22 30 Q32 26 42 30" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
+      <path d="M22 35 Q32 31 42 35" stroke="#16a34a" strokeWidth="2" strokeLinecap="round" fill="none" opacity="0.6"/>
+      {/* 배출 밸브 */}
+      <rect x="28" y="44" width="8" height="5" rx="2" fill="#16a34a" opacity="0.5"/>
     </svg>
   ),
   '공통': (
-    <svg viewBox="0 0 48 48" width="48" height="48" fill="none" stroke="#4b5563" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M6 14l18-8 18 8v20l-18 8-18-8V14z" />
-      <path d="M6 14l18 8 18-8M24 22v20" />
+    <svg viewBox="0 0 64 64" width="52" height="52" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="64" height="64" rx="16" fill="#f8fafc"/>
+      {/* 기어 큰 것 */}
+      <circle cx="26" cy="30" r="9" fill="none" stroke="#475569" strokeWidth="2.5"/>
+      <circle cx="26" cy="30" r="4" fill="#475569" opacity="0.2"/>
+      {/* 기어 톱니 */}
+      {[0,45,90,135,180,225,270,315].map((deg, i) => {
+        const rad = (deg * Math.PI) / 180;
+        const x1 = 26 + 9 * Math.cos(rad);
+        const y1 = 30 + 9 * Math.sin(rad);
+        const x2 = 26 + 12.5 * Math.cos(rad);
+        const y2 = 30 + 12.5 * Math.sin(rad);
+        return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#475569" strokeWidth="3" strokeLinecap="round"/>;
+      })}
+      {/* 작은 기어 */}
+      <circle cx="42" cy="22" r="6" fill="none" stroke="#94a3b8" strokeWidth="2"/>
+      <circle cx="42" cy="22" r="2.5" fill="#94a3b8" opacity="0.3"/>
+      {[0,60,120,180,240,300].map((deg, i) => {
+        const rad = (deg * Math.PI) / 180;
+        const x1 = 42 + 6 * Math.cos(rad);
+        const y1 = 22 + 6 * Math.sin(rad);
+        const x2 = 42 + 8.5 * Math.cos(rad);
+        const y2 = 22 + 8.5 * Math.sin(rad);
+        return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round"/>;
+      })}
+      {/* 렌치 */}
+      <path d="M36 36 L46 46" stroke="#475569" strokeWidth="3" strokeLinecap="round"/>
+      <circle cx="34" cy="34" r="3" fill="none" stroke="#475569" strokeWidth="2"/>
     </svg>
   )
 };
