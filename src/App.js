@@ -15,99 +15,346 @@ const USER_MAP = {
 };
 
 // ============================================================
-// 부품종류별 아이콘 (SVG)
+// 부품종류별 아이콘 — 키워드 매칭 방식
+// 새로운 부품종류가 Excel에 추가돼도 자동으로 어울리는 아이콘이 붙습니다.
 // ============================================================
-const categoryIcons = {
-  '베어링': (
-    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="24" cy="24" r="18" />
-      <circle cx="24" cy="24" r="6" />
-      <circle cx="24" cy="12" r="2.5" fill="currentColor" stroke="none" />
-      <circle cx="34.4" cy="18" r="2.5" fill="currentColor" stroke="none" />
-      <circle cx="34.4" cy="30" r="2.5" fill="currentColor" stroke="none" />
-      <circle cx="24" cy="36" r="2.5" fill="currentColor" stroke="none" />
-      <circle cx="13.6" cy="30" r="2.5" fill="currentColor" stroke="none" />
-      <circle cx="13.6" cy="18" r="2.5" fill="currentColor" stroke="none" />
-    </svg>
-  ),
-  '오일필터': (
-    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="14" y="8" width="20" height="32" rx="4" />
-      <line x1="14" y1="16" x2="34" y2="16" />
-      <line x1="16" y1="22" x2="32" y2="22" />
-      <line x1="16" y1="27" x2="30" y2="27" />
-      <line x1="16" y1="32" x2="28" y2="32" />
-    </svg>
-  ),
-  '벨트': (
-    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="24" r="7" />
-      <circle cx="36" cy="24" r="7" />
-      <line x1="12" y1="17" x2="36" y2="17" />
-      <line x1="12" y1="31" x2="36" y2="31" />
-    </svg>
-  ),
-  '패킹': (
-    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <ellipse cx="24" cy="24" rx="16" ry="8" />
-      <ellipse cx="24" cy="20" rx="16" ry="8" />
-      <ellipse cx="24" cy="16" rx="16" ry="8" />
-    </svg>
-  ),
-  '볼트/너트': (
-    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="24,6 30,12 30,18 24,22 18,18 18,12" />
-      <line x1="24" y1="22" x2="24" y2="42" />
-      <line x1="20" y1="27" x2="28" y2="27" />
-      <line x1="20" y1="31" x2="28" y2="31" />
-      <line x1="20" y1="35" x2="28" y2="35" />
-    </svg>
-  ),
-  '감속기': (
-    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="8" y="14" width="14" height="20" rx="2" />
-      <rect x="26" y="10" width="14" height="28" rx="2" />
-      <circle cx="15" cy="24" r="4" />
-      <circle cx="33" cy="24" r="6" />
-      <line x1="22" y1="20" x2="26" y2="20" />
-      <line x1="22" y1="28" x2="26" y2="28" />
-    </svg>
-  ),
-  '베어링': (
-    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="24" cy="24" r="18" />
-      <circle cx="24" cy="24" r="6" />
-      <circle cx="24" cy="12" r="2" fill="currentColor" stroke="none" />
-      <circle cx="34.4" cy="18" r="2" fill="currentColor" stroke="none" />
-      <circle cx="34.4" cy="30" r="2" fill="currentColor" stroke="none" />
-      <circle cx="24" cy="36" r="2" fill="currentColor" stroke="none" />
-      <circle cx="13.6" cy="30" r="2" fill="currentColor" stroke="none" />
-      <circle cx="13.6" cy="18" r="2" fill="currentColor" stroke="none" />
-    </svg>
-  ),
-  '계장부품': (
-    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M10 38a14 14 0 1 1 28 0" />
-      <path d="M24 38V20l6 4" />
-      <line x1="14" y1="30" x2="16" y2="32" />
-      <line x1="32" y1="30" x2="34" y2="32" />
-    </svg>
-  ),
-  '기타': (
-    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M8 12h32M8 24h32M8 36h32" />
-      <rect x="6" y="6" width="36" height="36" rx="4" />
-    </svg>
-  ),
-};
+function getPartIcon(name = '') {
+  const n = name.trim().toLowerCase();
 
-const defaultIcon = (
-  <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="8" y="8" width="32" height="32" rx="4" />
-    <line x1="8" y1="20" x2="40" y2="20" />
-    <line x1="16" y1="30" x2="32" y2="30" />
-  </svg>
-);
+  // 베어링
+  if (n.includes('베어링') || n.includes('bearing')) return (
+    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="24" cy="24" r="17" />
+      <circle cx="24" cy="24" r="7" />
+      {[0,60,120,180,240,300].map((deg, i) => {
+        const r = (deg * Math.PI) / 180;
+        const mx = 24 + 12 * Math.cos(r), my = 24 + 12 * Math.sin(r);
+        return <circle key={i} cx={mx} cy={my} r="2.2" fill="currentColor" stroke="none" />;
+      })}
+    </svg>
+  );
+
+  // 오일·윤활·그리스
+  if (n.includes('오일') || n.includes('윤활') || n.includes('그리스') || n.includes('oil')) return (
+    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="14" y="6" width="20" height="30" rx="5" />
+      <line x1="14" y1="14" x2="34" y2="14" />
+      <line x1="17" y1="20" x2="31" y2="20" />
+      <line x1="17" y1="25" x2="29" y2="25" />
+      <path d="M20 36 Q24 44 28 36" strokeDasharray="none" />
+    </svg>
+  );
+
+  // 필터
+  if (n.includes('필터') || n.includes('filter')) return (
+    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8 10h32l-12 14v12l-8-4V24Z" />
+    </svg>
+  );
+
+  // 벨트·체인
+  if (n.includes('벨트') || n.includes('체인') || n.includes('belt') || n.includes('chain')) return (
+    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="24" r="7" />
+      <circle cx="37" cy="24" r="7" />
+      <line x1="11" y1="17" x2="37" y2="17" />
+      <line x1="11" y1="31" x2="37" y2="31" />
+      <circle cx="24" cy="17" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="24" cy="31" r="1.5" fill="currentColor" stroke="none" />
+    </svg>
+  );
+
+  // 패킹·씰·오링·가스켓
+  if (n.includes('패킹') || n.includes('씰') || n.includes('오링') || n.includes('가스켓') || n.includes('seal') || n.includes('o-ring')) return (
+    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <ellipse cx="24" cy="28" rx="15" ry="6" />
+      <ellipse cx="24" cy="22" rx="15" ry="6" />
+      <line x1="9" y1="22" x2="9" y2="28" />
+      <line x1="39" y1="22" x2="39" y2="28" />
+    </svg>
+  );
+
+  // 볼트·너트·나사·스크류
+  if (n.includes('볼트') || n.includes('너트') || n.includes('나사') || n.includes('스크류') || n.includes('bolt') || n.includes('nut') || n.includes('screw')) return (
+    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="24,5 31,11 31,19 24,23 17,19 17,11" />
+      <line x1="24" y1="23" x2="24" y2="43" />
+      <line x1="19" y1="28" x2="29" y2="28" />
+      <line x1="19" y1="33" x2="29" y2="33" />
+      <line x1="19" y1="38" x2="29" y2="38" />
+    </svg>
+  );
+
+  // 감속기·기어박스
+  if (n.includes('감속기') || n.includes('기어박스') || n.includes('reducer')) return (
+    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="6" y="14" width="15" height="20" rx="2" />
+      <rect x="27" y="10" width="15" height="28" rx="2" />
+      <circle cx="13.5" cy="24" r="4" />
+      <circle cx="34.5" cy="24" r="6" />
+      <line x1="21" y1="19" x2="27" y2="19" />
+      <line x1="21" y1="29" x2="27" y2="29" />
+    </svg>
+  );
+
+  // 기어·치차
+  if (n.includes('기어') || n.includes('치차') || n.includes('gear')) return (
+    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="24" cy="24" r="8" />
+      {[0,45,90,135,180,225,270,315].map((deg, i) => {
+        const r = (deg * Math.PI) / 180;
+        return <line key={i} x1={24 + 8*Math.cos(r)} y1={24 + 8*Math.sin(r)} x2={24 + 13*Math.cos(r)} y2={24 + 13*Math.sin(r)} strokeWidth="4" strokeLinecap="square" />;
+      })}
+    </svg>
+  );
+
+  // 센서·감지
+  if (n.includes('센서') || n.includes('감지') || n.includes('sensor') || n.includes('detector')) return (
+    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="16" y="20" width="16" height="18" rx="3" />
+      <circle cx="24" cy="29" r="3" fill="currentColor" stroke="none" />
+      <path d="M10 14 Q24 6 38 14" />
+      <path d="M13 19 Q24 13 35 19" />
+    </svg>
+  );
+
+  // 실린더·에어실린더·유압실린더
+  if (n.includes('실린더') || n.includes('cylinder')) return (
+    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="10" y="16" width="24" height="16" rx="3" />
+      <line x1="34" y1="24" x2="42" y2="24" />
+      <line x1="6" y1="24" x2="10" y2="24" />
+      <line x1="18" y1="16" x2="18" y2="32" strokeDasharray="3 2" />
+    </svg>
+  );
+
+  // 솔레노이드·솔밸브·밸브
+  if (n.includes('솔밸브') || n.includes('솔레노이드') || n.includes('밸브') || n.includes('valve') || n.includes('solenoid')) return (
+    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="6" y1="24" x2="42" y2="24" />
+      <polygon points="20,16 28,16 28,32 20,32" />
+      <line x1="24" y1="10" x2="24" y2="16" />
+      <rect x="20" y="7" width="8" height="4" rx="1" />
+    </svg>
+  );
+
+  // 릴레이·전자접촉기·마그넷
+  if (n.includes('릴레이') || n.includes('relay') || n.includes('전자접촉기') || n.includes('마그넷') || n.includes('contactor')) return (
+    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="12" y="10" width="24" height="28" rx="3" />
+      <line x1="18" y1="10" x2="18" y2="6" />
+      <line x1="24" y1="10" x2="24" y2="6" />
+      <line x1="30" y1="10" x2="30" y2="6" />
+      <line x1="18" y1="38" x2="18" y2="42" />
+      <line x1="30" y1="38" x2="30" y2="42" />
+      <rect x="17" y="18" width="14" height="12" rx="2" />
+    </svg>
+  );
+
+  // 모터·전동기
+  if (n.includes('모터') || n.includes('전동기') || n.includes('motor')) return (
+    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="8" y="14" width="26" height="20" rx="4" />
+      <line x1="34" y1="24" x2="42" y2="24" />
+      <circle cx="21" cy="24" r="5" />
+      <line x1="8" y1="20" x2="4" y2="18" />
+      <line x1="8" y1="28" x2="4" y2="30" />
+    </svg>
+  );
+
+  // 펌프
+  if (n.includes('펌프') || n.includes('pump')) return (
+    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="24" cy="26" r="12" />
+      <path d="M24 14 Q30 8 36 8" />
+      <path d="M36 8 L36 14" />
+      <path d="M12 26 Q6 26 6 20" />
+      <circle cx="24" cy="26" r="4" />
+    </svg>
+  );
+
+  // 계장·압력계·유량계·온도계·게이지
+  if (n.includes('계장') || n.includes('압력계') || n.includes('유량계') || n.includes('온도계') || n.includes('게이지') || n.includes('gauge') || n.includes('meter')) return (
+    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 37 a16 16 0 1 1 30 0" />
+      <line x1="24" y1="37" x2="32" y2="22" strokeWidth="2" />
+      <circle cx="24" cy="37" r="2.5" fill="currentColor" stroke="none" />
+      <line x1="11" y1="31" x2="14" y2="28" />
+      <line x1="37" y1="31" x2="34" y2="28" />
+      <line x1="24" y1="21" x2="24" y2="24" />
+    </svg>
+  );
+
+  // 스프링·용수철
+  if (n.includes('스프링') || n.includes('용수철') || n.includes('spring')) return (
+    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="24" y1="6" x2="24" y2="10" />
+      <path d="M16 10 Q32 10 32 16 Q32 22 16 22 Q16 28 32 28 Q32 34 16 34 Q16 40 32 40" />
+      <line x1="24" y1="40" x2="24" y2="44" />
+    </svg>
+  );
+
+  // 호스·튜브·파이프
+  if (n.includes('호스') || n.includes('튜브') || n.includes('파이프') || n.includes('hose') || n.includes('tube') || n.includes('pipe')) return (
+    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8 18 Q8 10 16 10 L32 10 Q40 10 40 18 L40 30 Q40 38 32 38 L16 38 Q8 38 8 30 Z" />
+      <path d="M14 18 Q14 16 16 16 L32 16 Q34 16 34 18 L34 30 Q34 32 32 32 L16 32 Q14 32 14 30 Z" />
+    </svg>
+  );
+
+  // 전기·전선·케이블·퓨즈·브레이커
+  if (n.includes('전선') || n.includes('케이블') || n.includes('퓨즈') || n.includes('브레이커') || n.includes('cable') || n.includes('fuse') || n.includes('breaker')) return (
+    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M27 6 L20 22 H26 L19 42 L36 20 H28 Z" fill="currentColor" fillOpacity="0.15" />
+      <path d="M27 6 L20 22 H26 L19 42 L36 20 H28 Z" />
+    </svg>
+  );
+
+  // 롤러·로울러
+  if (n.includes('롤러') || n.includes('로울러') || n.includes('roller')) return (
+    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <ellipse cx="24" cy="24" rx="8" ry="16" />
+      <line x1="16" y1="24" x2="8" y2="24" />
+      <line x1="32" y1="24" x2="40" y2="24" />
+      <line x1="24" y1="8" x2="24" y2="10" />
+      <line x1="24" y1="38" x2="24" y2="40" />
+    </svg>
+  );
+
+  // 기타 / 매칭 없음
+  return (
+    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="8" y="8" width="32" height="32" rx="5" />
+      <line x1="16" y1="20" x2="32" y2="20" />
+      <line x1="16" y1="28" x2="26" y2="28" />
+      <circle cx="32" cy="32" r="5" />
+      <line x1="30" y1="32" x2="34" y2="32" />
+      <line x1="32" y1="30" x2="32" y2="34" />
+    </svg>
+  );
+}
+
+// ============================================================
+// 설비명별 아이콘 — 키워드 매칭 방식
+// ============================================================
+function getFacilityIcon(name = '') {
+  const n = name.trim().toLowerCase();
+
+  // 충전기 (립스틱·틴트·파운데이션 등)
+  if (n.includes('충전기') || n.includes('충전')) return (
+    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      {/* 립스틱 튜브 */}
+      <rect x="17" y="26" width="14" height="16" rx="2" />
+      <path d="M19 26 Q24 14 29 26" />
+      <line x1="17" y1="31" x2="31" y2="31" strokeDasharray="3 2" />
+      {/* 충전 노즐 */}
+      <line x1="8" y1="22" x2="17" y2="28" />
+      <circle cx="7" cy="21" r="2.5" fill="currentColor" stroke="none" />
+    </svg>
+  );
+
+  // 프레스·타정기
+  if (n.includes('프레스') || n.includes('press') || n.includes('타정')) return (
+    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      {/* 프레임 */}
+      <rect x="10" y="6" width="28" height="6" rx="2" />
+      <line x1="12" y1="12" x2="12" y2="40" />
+      <line x1="36" y1="12" x2="36" y2="40" />
+      <line x1="12" y1="40" x2="36" y2="40" />
+      {/* 프레스 헤드 */}
+      <rect x="18" y="14" width="12" height="8" rx="1" />
+      <line x1="24" y1="22" x2="24" y2="30" />
+      {/* 다이 */}
+      <ellipse cx="24" cy="34" rx="8" ry="3" />
+      {/* 화살표 */}
+      <polyline points="21,26 24,30 27,26" />
+    </svg>
+  );
+
+  // 컨베이어·이송기
+  if (n.includes('컨베이어') || n.includes('conveyor') || n.includes('이송')) return (
+    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="6" y1="20" x2="42" y2="20" />
+      <line x1="6" y1="28" x2="42" y2="28" />
+      <circle cx="10" cy="24" r="6" />
+      <circle cx="38" cy="24" r="6" />
+      <rect x="16" y="16" width="8" height="8" rx="1" />
+      <rect x="27" y="16" width="8" height="8" rx="1" />
+      <polyline points="35,22 39,24 35,26" fill="currentColor" />
+    </svg>
+  );
+
+  // 믹서·교반기·혼합기
+  if (n.includes('믹서') || n.includes('교반') || n.includes('혼합') || n.includes('mixer') || n.includes('agitator')) return (
+    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 12 Q14 38 24 40 Q34 38 34 12" />
+      <ellipse cx="24" cy="12" rx="10" ry="3" />
+      <line x1="24" y1="12" x2="24" y2="34" />
+      <path d="M16 22 Q24 18 32 22" />
+      <path d="M16 28 Q24 24 32 28" />
+    </svg>
+  );
+
+  // 포장기·씰링기
+  if (n.includes('포장') || n.includes('씰링') || n.includes('sealing') || n.includes('packing')) return (
+    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="10" y="16" width="28" height="20" rx="2" />
+      <polyline points="10,24 24,32 38,24" />
+      <line x1="24" y1="8" x2="24" y2="16" />
+      <line x1="18" y1="11" x2="30" y2="11" />
+    </svg>
+  );
+
+  // 펌프
+  if (n.includes('펌프') || n.includes('pump')) return (
+    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="24" cy="28" r="12" />
+      <circle cx="24" cy="28" r="5" />
+      <line x1="24" y1="16" x2="24" y2="10" />
+      <line x1="10" y1="28" x2="6" y2="28" />
+      <path d="M30 14 Q36 8 38 8 L38 14" />
+    </svg>
+  );
+
+  // 로봇·암
+  if (n.includes('로봇') || n.includes('robot') || n.includes('arm')) return (
+    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="18" y="36" width="12" height="6" rx="2" />
+      <line x1="24" y1="36" x2="24" y2="28" />
+      <line x1="24" y1="28" x2="34" y2="20" />
+      <line x1="34" y1="20" x2="40" y2="26" />
+      <circle cx="24" cy="28" r="3" />
+      <circle cx="34" cy="20" r="3" />
+      <line x1="38" y1="28" x2="42" y2="24" />
+    </svg>
+  );
+
+  // 오븐·건조기·히터
+  if (n.includes('오븐') || n.includes('건조') || n.includes('히터') || n.includes('oven') || n.includes('dryer') || n.includes('heater')) return (
+    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="8" y="10" width="32" height="28" rx="3" />
+      <rect x="13" y="15" width="22" height="14" rx="2" />
+      <circle cx="14" cy="33" r="2" />
+      <circle cx="24" cy="33" r="2" />
+      <circle cx="34" cy="33" r="2" />
+      <line x1="18" y1="19" x2="30" y2="19" strokeDasharray="3 2" />
+      <line x1="18" y1="23" x2="30" y2="23" strokeDasharray="3 2" />
+    </svg>
+  );
+
+  // 기본 (매칭 없음) — 공장 기계 범용 아이콘
+  return (
+    <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="6" y="28" width="36" height="14" rx="2" />
+      <rect x="14" y="18" width="10" height="10" rx="1" />
+      <rect x="28" y="14" width="10" height="14" rx="1" />
+      <line x1="6" y1="28" x2="6" y2="42" />
+      <line x1="42" y1="28" x2="42" y2="42" />
+      <circle cx="14" cy="38" r="2.5" fill="currentColor" stroke="none" />
+      <circle cx="34" cy="38" r="2.5" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
 
 // ============================================================
 // App (루트 컴포넌트)
@@ -649,11 +896,7 @@ function FacilityPage({ selectedSheet, facilities, onFacilityClick, onBack, inve
                 style={{ minHeight: '140px' }}
               >
                 <div className="category-icon-wrap" style={{ background: '#f0f9ff' }}>
-                  <svg viewBox="0 0 48 48" width="32" height="32" fill="none" stroke="#0ea5e9" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M6 36v-6l6-10h24l6 10v6H6zM14 20V10l10-4 10 4v10" />
-                    <circle cx="16" cy="30" r="2" fill="currentColor" />
-                    <circle cx="32" cy="30" r="2" fill="currentColor" />
-                  </svg>
+                  {getFacilityIcon(facility)}
                 </div>
                 <div className="category-label" style={{ fontSize: '1.1rem' }}>{facility}</div>
                 <div className="category-meta">
@@ -756,6 +999,7 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
             >
   <div className="detail-card-top">
   <div className="detail-model-wrapper">
+    <span className="part-icon-inline">{getPartIcon(item.부품종류)}</span>
     {/* ✨ 부품종류(소분류) 텍스트 태그 추가 */}
     <span className="sub-category-tag">{item.부품종류}</span>
     
