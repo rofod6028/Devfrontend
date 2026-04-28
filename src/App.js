@@ -375,7 +375,31 @@ function App() {
   const [inventoryData, setInventoryData] = useState([]);
   const [selectedSheet, setSelectedSheet] = useState(null);
   const [facilities, setFacilities] = useState([]);
+  const [toasts, setToasts] = useState([]);
   
+
+  // ============================================================
+  // 토스트 메시지
+  // ============================================================
+  const showToast = (message, type = 'success') => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
+  };
+
+  // ============================================================
+  // 알림 항목 → 해당 부품으로 바로 이동
+  // ============================================================
+  const navigateToItem = (item) => {
+    setHighlightId(item.id);
+    const filtered = inventoryData.filter(d =>
+      d.원본시트 === item.원본시트 && d.적용설비 === item.적용설비
+    );
+    setDetailItems(filtered);
+    setSelectedSheet(item.원본시트);
+    setSelectedCategory(item.적용설비);
+    setPage('detail');
+  };
 
   // ✨ 알림 체크 (앱 시작 및 주기적)
    useEffect(() => {
@@ -572,11 +596,12 @@ function App() {
       return (
         <DetailPage
           items={detailItems}
-          categoryName={selectedCategory} // 이제 '설비명'이 될 것입니다.
-          onBack={() => setPage('facility')} // 뒤로가기 시 설비 선택 화면으로
+          categoryName={selectedCategory}
+          onBack={() => setPage('facility')}
           onUpdate={refreshData}
           userName={userName}
           highlightId={highlightId}
+          showToast={showToast}
         />
       );
 
@@ -592,10 +617,10 @@ function App() {
       );
 
     case 'summary':
-      return <SummaryPage summary={summary} onBack={() => setPage('main')} />;
+      return <SummaryPage summary={summary} onBack={() => setPage('main')} onNavigateToItem={navigateToItem} />;
     
     case 'logs':
-      return <LogsPage onBack={() => setPage('main')} />;
+      return <LogsPage onBack={() => setPage('main')} inventoryData={inventoryData} />;
 
     default: // 1단계: 메인화면 (공정 선택)
         return (
@@ -687,7 +712,16 @@ function App() {
         {renderPage()}
       </main>
 
-      <AIChatBar onInventoryUpdate={refreshData} />
+      <AIChatBar onInventoryUpdate={refreshData} showToast={showToast} />
+
+      {/* 토스트 메시지 컨테이너 */}
+      <div className="toast-container">
+        {toasts.map(t => (
+          <div key={t.id} className={`toast toast-${t.type}`}>
+            {t.type === 'success' ? '✅' : t.type === 'error' ? '❌' : 'ℹ️'} {t.message}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -905,6 +939,16 @@ function FacilityPage({ selectedSheet, facilities, onFacilityClick, onBack, inve
                     <span className="low-stock-badge">⚠️ {lowStockCount}</span>
                   )}
                 </div>
+                {(() => {
+                  const lastModified = facilityItems
+                    .map(i => i.최종수정시각)
+                    .filter(Boolean)
+                    .sort()
+                    .pop();
+                  return lastModified ? (
+                    <div className="facility-last-modified">🕐 {lastModified}</div>
+                  ) : null;
+                })()}
               </button>
             );
           })
@@ -920,7 +964,7 @@ function FacilityPage({ selectedSheet, facilities, onFacilityClick, onBack, inve
 // ============================================================
 // DetailPage (카테고리 클릭 후 리스트 + ✨ 수동 수정 UI)
 // ============================================================
-function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlightId }) { 
+function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlightId, showToast }) { 
   const [editingId, setEditingId] = useState(null);
   const [editValue, setEditValue] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
@@ -954,9 +998,10 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
         user: userName 
       });
       setEditingId(null);
+      showToast('수량이 저장되었습니다.');
       await onUpdate(); 
     } catch (err) {
-      alert('저장 실패: ' + err.message);
+      showToast('저장 실패: ' + err.message, 'error');
     } finally {
       setIsSaving(false);
     }
@@ -1106,7 +1151,7 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
 // ============================================================
 // SummaryPage (전체 사용량 요약)
 // ============================================================
-function SummaryPage({ summary, onBack }) {
+function SummaryPage({ summary, onBack, onNavigateToItem }) {
   if (!summary) return null;
 
   return (
@@ -1149,6 +1194,7 @@ function SummaryPage({ summary, onBack }) {
       {summary.lowStockItems.length > 0 && (
         <div className="summary-section">
           <h3 className="section-title red-title">⚠ 재고 부족 목록</h3>
+          <p className="summary-hint">항목을 탭하면 해당 부품으로 바로 이동합니다</p>
           <div className="low-stock-table">
             <table>
               <thead>
@@ -1162,7 +1208,11 @@ function SummaryPage({ summary, onBack }) {
               </thead>
               <tbody>
                 {summary.lowStockItems.map((item) => (
-                  <tr key={item.id}>
+                  <tr
+                    key={item.id}
+                    className="clickable-row"
+                    onClick={() => onNavigateToItem && onNavigateToItem(item)}
+                  >
                     <td>{item.부품종류}</td>
                     <td>{item.모델명}</td>
                     <td>{item.적용설비}</td>
@@ -1182,27 +1232,80 @@ function SummaryPage({ summary, onBack }) {
 // ============================================================
 // ✨ LogsPage (재고 변경 이력)
 // ============================================================
-function LogsPage({ onBack }) {
+function LogsPage({ onBack, inventoryData }) {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const [total, setTotal] = useState(0);
+  const [filterFacility, setFilterFacility] = useState('');
+  const [filterPartType, setFilterPartType] = useState('');
+  const LIMIT = 50;
+
+  // inventoryData에서 동적으로 설비/부품종류 목록 추출
+  const facilityOptions = [...new Set(
+    (inventoryData || []).map(i => i.적용설비).filter(Boolean)
+  )].sort();
+  const partTypeOptions = [...new Set(
+    (inventoryData || []).map(i => i.부품종류).filter(Boolean)
+  )].sort();
 
   useEffect(() => {
-    loadLogs();
-  }, []);
+    setLogs([]);
+    setOffset(0);
+    fetchLogs(0, true);
+  }, [filterFacility, filterPartType]);
 
-  async function loadLogs() {
+  async function fetchLogs(offsetVal, reset = false) {
     try {
-      setLoading(true);
-      const res = await axios.get(`${BASE_URL}/inventory/logs?limit=100`);
-      setLogs(res.data.data);
+      reset ? setLoading(true) : setLoadingMore(true);
+      const params = new URLSearchParams({ limit: LIMIT, offset: offsetVal });
+      if (filterFacility) params.append('facility', filterFacility);
+      if (filterPartType) params.append('partType', filterPartType);
+      const res = await axios.get(`${BASE_URL}/inventory/logs?${params}`);
+      const newLogs = res.data.data;
+      setTotal(res.data.total);
+      setLogs(prev => reset ? newLogs : [...prev, ...newLogs]);
+      setOffset(offsetVal + newLogs.length);
     } catch (err) {
       console.error('로그 로드 실패:', err);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   }
 
+  const handleLoadMore = () => fetchLogs(offset);
+
   if (loading) return <div className="loading-spinner"><div className="spinner"></div><p>로드 중...</p></div>;
+
+  const inLogs  = logs.filter(l => l.action === '입고');
+  const outLogs = logs.filter(l => l.action === '출고');
+  const etcLogs = logs.filter(l => l.action !== '입고' && l.action !== '출고');
+
+  const LogCard = ({ log }) => (
+    <div className="log-item-col">
+      <div className="log-col-time">{log.timestampKR}</div>
+      <div className="log-col-name">
+        <span className="log-category">{log.부품종류}</span>
+        <span className="log-model">{log.모델명}</span>
+      </div>
+      <div className="log-col-qty">
+        <span className="log-qty-before">{log.변경전수량}</span>
+        <span className="log-qty-arrow">→</span>
+        <span className={`log-qty-after ${log.변경수량 > 0 ? 'positive' : 'negative'}`}>
+          {log.변경후수량}
+        </span>
+        <span className={`log-qty-change ${log.변경수량 > 0 ? 'positive' : 'negative'}`}>
+          ({log.변경수량 > 0 ? '+' : ''}{log.변경수량})
+        </span>
+      </div>
+      <div className="log-col-meta">
+        <span>📍 {log.적용설비}</span>
+        <span className="log-user-badge">👤 {log.user || '시스템'}</span>
+      </div>
+    </div>
+  );
 
   return (
     <div className="logs-page">
@@ -1217,40 +1320,105 @@ function LogsPage({ onBack }) {
         <h2>재고 변경 이력</h2>
       </div>
 
-      <div className="logs-list">
-        {logs.length === 0 && <div className="logs-empty">변경 이력이 없습니다</div>}
-        {logs.map(log => (
-          <div key={log.id} className={`log-item ${log.action}`}>
-            <div className="log-header">
-              <span className={`log-action ${log.action === '입고' ? 'in' : log.action === '출고' ? 'out' : 'edit'}`}>
-                {log.action === '입고' ? '📥' : log.action === '출고' ? '📤' : '✏️'} {log.action}
-              </span>
-              <span className="log-time">{log.timestampKR}</span>
-            </div>
-            <div className="log-body">
-              <div className="log-item-name">
+      {/* 필터 영역 */}
+      <div className="logs-filter-bar">
+        <select
+          className="logs-filter-select"
+          value={filterFacility}
+          onChange={e => setFilterFacility(e.target.value)}
+        >
+          <option value="">전체 설비</option>
+          {facilityOptions.map(f => (
+            <option key={f} value={f}>{f}</option>
+          ))}
+        </select>
+        <select
+          className="logs-filter-select"
+          value={filterPartType}
+          onChange={e => setFilterPartType(e.target.value)}
+        >
+          <option value="">전체 부품종류</option>
+          {partTypeOptions.map(p => (
+            <option key={p} value={p}>{p}</option>
+          ))}
+        </select>
+        {(filterFacility || filterPartType) && (
+          <button className="logs-filter-clear" onClick={() => { setFilterFacility(''); setFilterPartType(''); }}>
+            ✕ 초기화
+          </button>
+        )}
+        <span className="logs-total-count">총 {total}건</span>
+      </div>
+
+      {/* 입고 / 출고 2컬럼 */}
+      <div className="logs-split-wrap">
+        {/* 입고 컬럼 */}
+        <div className="logs-col logs-col-in">
+          <div className="logs-col-header logs-col-header-in">
+            📥 입고 <span className="logs-col-count">{inLogs.length}건</span>
+          </div>
+          <div className="logs-col-body">
+            {inLogs.length === 0
+              ? <div className="logs-empty-col">입고 내역 없음</div>
+              : inLogs.map(log => <LogCard key={log.id} log={log} />)
+            }
+          </div>
+        </div>
+
+        {/* 구분선 */}
+        <div className="logs-divider" />
+
+        {/* 출고 컬럼 */}
+        <div className="logs-col logs-col-out">
+          <div className="logs-col-header logs-col-header-out">
+            📤 출고 <span className="logs-col-count">{outLogs.length}건</span>
+          </div>
+          <div className="logs-col-body">
+            {outLogs.length === 0
+              ? <div className="logs-empty-col">출고 내역 없음</div>
+              : outLogs.map(log => <LogCard key={log.id} log={log} />)
+            }
+          </div>
+        </div>
+      </div>
+
+      {/* 수량변경 등 기타 (있을 경우만) */}
+      {etcLogs.length > 0 && (
+        <div className="logs-etc-section">
+          <div className="logs-col-header logs-col-header-etc">
+            ✏️ 수량변경 <span className="logs-col-count">{etcLogs.length}건</span>
+          </div>
+          {etcLogs.map(log => (
+            <div key={log.id} className="log-item-col log-item-etc">
+              <div className="log-col-time">{log.timestampKR}</div>
+              <div className="log-col-name">
                 <span className="log-category">{log.부품종류}</span>
                 <span className="log-model">{log.모델명}</span>
               </div>
-              <div className="log-quantity">
+              <div className="log-col-qty">
                 <span className="log-qty-before">{log.변경전수량}</span>
                 <span className="log-qty-arrow">→</span>
-                <span className={`log-qty-after ${log.변경수량 > 0 ? 'positive' : 'negative'}`}>
-                  {log.변경후수량}
-                </span>
-                <span className={`log-qty-change ${log.변경수량 > 0 ? 'positive' : 'negative'}`}>
-                  ({log.변경수량 > 0 ? '+' : ''}{log.변경수량})
-                </span>
+                <span className="log-qty-after">{log.변경후수량}</span>
               </div>
-              <div className="log-meta">
+              <div className="log-col-meta">
                 <span>📍 {log.적용설비}</span>
-                <span style={{ margin: '0 8px', color: '#ccc' }}>|</span>
                 <span className="log-user-badge">👤 {log.user || '시스템'}</span>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
+
+      {/* 더보기 버튼 */}
+      {logs.length < total && (
+        <button
+          className="logs-load-more"
+          onClick={handleLoadMore}
+          disabled={loadingMore}
+        >
+          {loadingMore ? '로드 중...' : `더보기 (${total - logs.length}건 남음)`}
+        </button>
+      )}
     </div>
   );
 }
@@ -1258,7 +1426,7 @@ function LogsPage({ onBack }) {
 // ============================================================
 // AIChatBar (하단 고정 AI 채팅 한 줄)
 // ============================================================
-function AIChatBar({ onInventoryUpdate }) {
+function AIChatBar({ onInventoryUpdate, showToast }) {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState([]);
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -1270,6 +1438,11 @@ function AIChatBar({ onInventoryUpdate }) {
       chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages]);
+
+  // ~~~INVENTORY_UPDATE ... ~~~ 블록을 메시지에서 제거
+  function cleanAIMessage(text) {
+    return text.replace(/~~~INVENTORY_UPDATE[\s\S]*?~~~/g, '').trim();
+  }
 
   async function handleSend() {
     if (!input.trim() || isLoading) return;
@@ -1288,17 +1461,16 @@ function AIChatBar({ onInventoryUpdate }) {
       const res = await axios.post(`${BASE_URL}/ai/chat`, {
         message: userMsg.text,
         conversationHistory: history,
-        user: localStorage.getItem('inventory_user') || '미확인 사용자' // 실제 사용자 이름 전달
+        user: localStorage.getItem('inventory_user') || '미확인 사용자'
       });
 
-      let aiText = res.data.message;
+      let aiText = cleanAIMessage(res.data.message);
       
       if (res.data.inventoryUpdated && res.data.updateResult) {
         const { action, items } = res.data.updateResult;
         const itemsText = items.map(i => `${i.모델명} ${i.수량}개`).join(', ');
         aiText += `\n\n✅ ${action} 완료: ${itemsText}`;
-        
-        // ✅ 재고 업데이트 후 데이터 새로고침
+        showToast && showToast(`${action} 완료: ${itemsText}`);
         setTimeout(() => onInventoryUpdate(), 500);
       }
 
