@@ -992,6 +992,9 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
   const [editingId, setEditingId] = useState(null);
   const [editValue, setEditValue] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
+  // 방안C: 공통부품 출고 시 설비 선택 팝업
+  const [commonPopup, setCommonPopup] = useState(null); // { item, newQty, oldQty }
+  const [selectedFacility, setSelectedFacility] = useState('');
 
   // ✨ [추가] 검색된 부품 위치로 부드럽게 자동 스크롤하는 효과
   useEffect(() => {
@@ -1013,17 +1016,42 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
   };
 
   const handleSave = async (item) => {
+    // 방안C: 공통부품 출고(수량 감소)인 경우 설비 선택 팝업 먼저 띄우기
+    const isCommonPart = item.isCommonPart || String(item.적용설비 || '').includes('공통');
+    const isOutgoing = editValue < item.현재수량;
+    if (isCommonPart && isOutgoing) {
+      setCommonPopup({ item, newQty: editValue, oldQty: item.현재수량 });
+      setSelectedFacility('');
+      return;
+    }
+    await doSave(item, editValue, item.현재수량, null);
+  };
+
+  const doSave = async (item, newQty, oldQty, facilityName) => {
     try {
       setIsSaving(true);
-      await axios.post(`${BASE_URL}/inventory/manual-update`, {
-        id: item.id,
-        현재수량: editValue,
-        action: '수량변경', 
-        user: userName 
-      });
+      const isCommonPart = item.isCommonPart || String(item.적용설비 || '').includes('공통');
+      if (isCommonPart && facilityName) {
+        // 공통부품 출고 — 전용 API 호출
+        await axios.post(`${BASE_URL}/inventory/common-update`, {
+          id: item.id,
+          현재수량: newQty,
+          action: '출고',
+          user: userName,
+          실제사용설비: facilityName,
+        });
+      } else {
+        await axios.post(`${BASE_URL}/inventory/manual-update`, {
+          id: item.id,
+          현재수량: newQty,
+          action: newQty < oldQty ? '출고' : newQty > oldQty ? '입고' : '수량변경',
+          user: userName,
+        });
+      }
       setEditingId(null);
+      setCommonPopup(null);
       showToast('수량이 저장되었습니다.');
-      await onUpdate(); 
+      await onUpdate();
     } catch (err) {
       showToast('저장 실패: ' + err.message, 'error');
     } finally {
@@ -1034,10 +1062,69 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
 
   const handleCancel = () => {
     setEditingId(null);
+    setCommonPopup(null);
   };
 
   return (
     <div className="detail-page">
+      {/* 방안C: 공통부품 출고 설비 선택 팝업 */}
+      {commonPopup && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
+        }}>
+          <div style={{
+            background: '#fff', borderRadius: '16px', padding: '24px 20px',
+            maxWidth: '360px', width: '100%', boxShadow: '0 8px 32px rgba(0,0,0,0.18)'
+          }}>
+            <div style={{ fontSize: '1rem', fontWeight: 800, color: '#1a1f2e', marginBottom: '6px' }}>
+              🏭 사용 설비 선택
+            </div>
+            <div style={{ fontSize: '0.78rem', color: '#6b7280', marginBottom: '16px', lineHeight: 1.5 }}>
+              <strong style={{ color: '#2563eb' }}>{commonPopup.item.모델명}</strong>은 공통 부품입니다.<br/>
+              실제로 사용할 설비를 입력하거나 선택해 주세요.
+            </div>
+            <input
+              type="text"
+              placeholder="예: 립스틱충전기#1"
+              value={selectedFacility}
+              onChange={e => setSelectedFacility(e.target.value)}
+              style={{
+                width: '100%', padding: '10px 12px', borderRadius: '8px',
+                border: '1.5px solid #d1d5db', fontSize: '0.9rem',
+                boxSizing: 'border-box', marginBottom: '12px',
+                outline: 'none',
+              }}
+              autoFocus
+            />
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => doSave(commonPopup.item, commonPopup.newQty, commonPopup.oldQty, selectedFacility)}
+                disabled={!selectedFacility.trim() || isSaving}
+                style={{
+                  flex: 1, padding: '10px', borderRadius: '8px', border: 'none',
+                  background: selectedFacility.trim() ? '#2563eb' : '#9ca3af',
+                  color: '#fff', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer',
+                }}
+              >
+                {isSaving ? '저장 중...' : '✓ 출고 확인'}
+              </button>
+              <button
+                onClick={() => setCommonPopup(null)}
+                disabled={isSaving}
+                style={{
+                  padding: '10px 16px', borderRadius: '8px', border: '1.5px solid #e5e7eb',
+                  background: '#f9fafb', color: '#6b7280', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer',
+                }}
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {!hideHeader && (
       <div className="detail-header">
         <button className="back-btn" onClick={onBack}>
@@ -1607,9 +1694,11 @@ function FacilityDashboardPage({ facilityName, inventoryData, selectedSheet, onB
     fetchLogs();
   }, [facilityName]);
 
-  // ── 최근 1개월 필터 ──
+  // ── 최근 6개월 필터 (주별 추이는 6개월, 소모분석은 1개월) ──
   const oneMonthAgo = new Date();
   oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
   function parseKSTDate(raw) {
     if (!raw) return null;
@@ -1654,25 +1743,42 @@ function FacilityDashboardPage({ facilityName, inventoryData, selectedSheet, onB
     .slice(0, 8);
   const maxTotal = sortedParts[0]?.total || 1;
 
-  // 일별 출고 추이 (최근 1개월, 주 단위로 묶기)
-  const weeklyTrend = {};
-  outLogs.forEach(log => {
+  // 주별 출고 추이 — 최근 6개월 기준, 부품명별 집계
+  const weeklyTrend = {}; // { 'M/D': { total, parts: { 모델명: qty } } }
+  const sixMonthOutLogs = facilityLogs.filter(l => {
+    const d = parseKSTDate(l.timestampKR);
+    return d && d >= sixMonthsAgo && (l.변경수량 < 0 || l.action === '출고');
+  });
+  // 상위 3개 부품 추출 (전체 6개월 기준)
+  const top3Models = Object.entries(
+    sixMonthOutLogs.reduce((acc, l) => {
+      const m = l.모델명 || '미상';
+      acc[m] = (acc[m] || 0) + Math.abs(Number(l.변경수량) || 0);
+      return acc;
+    }, {})
+  ).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([m]) => m);
+
+  const trendColors = ['#2563eb', '#7c3aed', '#059669'];
+
+  sixMonthOutLogs.forEach(log => {
     const d = parseKSTDate(log.timestampKR);
     if (!d) return;
-    // 해당 날짜가 속한 주의 월요일을 키로
-    const day = d.getDay(); // 0=일 1=월 ...
+    const day = d.getDay();
     const monday = new Date(d);
     monday.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
     const key = `${monday.getMonth() + 1}/${monday.getDate()}`;
-    if (!weeklyTrend[key]) weeklyTrend[key] = 0;
-    weeklyTrend[key] += Math.abs(Number(log.변경수량) || 0);
+    const model = log.모델명 || '미상';
+    const qty = Math.abs(Number(log.변경수량) || 0);
+    if (!weeklyTrend[key]) weeklyTrend[key] = { total: 0, parts: {} };
+    weeklyTrend[key].total += qty;
+    weeklyTrend[key].parts[model] = (weeklyTrend[key].parts[model] || 0) + qty;
   });
   const trendEntries = Object.entries(weeklyTrend).sort(([a], [b]) => {
     const [am, ad] = a.split('/').map(Number);
     const [bm, bd] = b.split('/').map(Number);
     return am !== bm ? am - bm : ad - bd;
   });
-  const maxTrend = Math.max(...trendEntries.map(([, v]) => v), 1);
+  const maxTrend = Math.max(...trendEntries.map(([, v]) => v.total), 1);
 
   // 재고 부족 위험 부품
   const riskItems = facilityItems
@@ -1752,7 +1858,7 @@ function FacilityDashboardPage({ facilityName, inventoryData, selectedSheet, onB
 
               {/* 기간 레이블 */}
               <div style={{ fontSize: '0.7rem', color: '#9ca3af', textAlign: 'right' }}>
-                📅 최근 1개월 기준
+                📊 소모분석: 최근 1개월 | 추이: 최근 6개월
               </div>
 
               {/* 차트 두 개 가로 배치 */}
@@ -1795,26 +1901,52 @@ function FacilityDashboardPage({ facilityName, inventoryData, selectedSheet, onB
 
                 {/* 오른쪽: 주별 출고 추이 */}
                 <div style={{ background: '#fff', borderRadius: '12px', padding: '11px 10px', boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#1a1f2e', marginBottom: '10px', lineHeight: 1.3 }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#1a1f2e', marginBottom: '4px', lineHeight: 1.3 }}>
                     📅 주별 출고 추이
+                    <span style={{ fontSize: '0.62rem', color: '#9ca3af', fontWeight: 400, marginLeft: '4px' }}>최근 6개월</span>
                   </div>
+                  {/* 범례 */}
+                  {top3Models.length > 0 && (
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                      {top3Models.map((m, i) => (
+                        <span key={m} style={{ fontSize: '0.55rem', color: trendColors[i], fontWeight: 700, display: 'flex', alignItems: 'center', gap: '2px' }}>
+                          <span style={{ width: 7, height: 7, borderRadius: '50%', background: trendColors[i], display: 'inline-block' }} />
+                          {m.length > 10 ? m.slice(0, 10) + '…' : m}
+                        </span>
+                      ))}
+                      {sixMonthOutLogs.length > 0 && <span style={{ fontSize: '0.55rem', color: '#9ca3af', marginLeft: 'auto' }}>기타 포함</span>}
+                    </div>
+                  )}
                   {trendEntries.length === 0 ? (
-                    <div style={{ textAlign: 'center', color: '#9ca3af', padding: '16px 0', fontSize: '0.72rem' }}>데이터 없음</div>
+                    <div style={{ textAlign: 'center', color: '#9ca3af', padding: '16px 0', fontSize: '0.72rem' }}>6개월 이내 출고 내역 없음</div>
                   ) : (
-                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '5px', height: '110px', padding: '0 2px' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '120px', padding: '0 2px', overflowX: 'auto' }}>
                       {trendEntries.map(([week, val]) => {
-                        const barH = Math.max((val / maxTrend) * 75, 4);
+                        const barH = Math.max((val.total / maxTrend) * 80, 4);
+                        // 상위 3 부품 스택 비율 계산
+                        const segments = top3Models.map(m => ({
+                          model: m,
+                          qty: val.parts[m] || 0,
+                          color: trendColors[top3Models.indexOf(m)],
+                        })).filter(s => s.qty > 0);
+                        const otherQty = val.total - segments.reduce((s, x) => s + x.qty, 0);
+                        if (otherQty > 0) segments.push({ model: '기타', qty: otherQty, color: '#d1d5db' });
                         return (
-                          <div key={week} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
-                            <div style={{ fontSize: '0.58rem', color: '#6b7280', fontWeight: 600 }}>{val}</div>
-                            <div style={{ width: '100%', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', height: '75px' }}>
-                              <div style={{
-                                width: '65%', height: `${barH}px`, borderRadius: '3px 3px 0 0',
-                                background: 'linear-gradient(180deg, #60a5fa 0%, #2563eb 100%)',
-                                transition: 'height 0.5s ease',
-                              }} />
+                          <div key={week} style={{ minWidth: '28px', flex: '0 0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                            <div style={{ fontSize: '0.55rem', color: '#6b7280', fontWeight: 600 }}>{val.total}</div>
+                            <div style={{ width: '18px', display: 'flex', flexDirection: 'column-reverse', alignItems: 'center', height: '80px', justifyContent: 'flex-start' }}>
+                              {segments.map((seg, si) => {
+                                const segH = Math.max((seg.qty / val.total) * barH, 2);
+                                return (
+                                  <div key={si} title={`${seg.model}: ${seg.qty}개`} style={{
+                                    width: '100%', height: `${segH}px`,
+                                    background: seg.color,
+                                    borderRadius: si === segments.length - 1 ? '3px 3px 0 0' : '0',
+                                  }} />
+                                );
+                              })}
                             </div>
-                            <div style={{ fontSize: '0.55rem', color: '#9ca3af', textAlign: 'center', lineHeight: 1.2 }}>
+                            <div style={{ fontSize: '0.5rem', color: '#9ca3af', textAlign: 'center', lineHeight: 1.2, writingMode: 'horizontal-tb' }}>
                               {week}
                             </div>
                           </div>
