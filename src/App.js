@@ -620,6 +620,8 @@ function App() {
           onBack={() => setPage('facility')}
           onGoDetail={() => setPage('detail')}
           showToast={showToast}
+          userName={userName}
+          onInventoryUpdate={refreshData}
         />
       );
 
@@ -986,7 +988,7 @@ function FacilityPage({ selectedSheet, facilities, onFacilityClick, onBack, inve
 // ============================================================
 // DetailPage (카테고리 클릭 후 리스트 + ✨ 수동 수정 UI)
 // ============================================================
-function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlightId, showToast, isCommonSheet }) { 
+function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlightId, showToast, isCommonSheet, hideHeader }) { 
   const [editingId, setEditingId] = useState(null);
   const [editValue, setEditValue] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
@@ -1036,6 +1038,7 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
 
   return (
     <div className="detail-page">
+      {!hideHeader && (
       <div className="detail-header">
         <button className="back-btn" onClick={onBack}>
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1055,6 +1058,7 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
   )}
 </div>
       </div>
+      )}
 
       <div className="detail-list">
         {items.map((item) => {
@@ -1575,7 +1579,7 @@ function AIChatBar({ onInventoryUpdate, showToast }) {
 // ============================================================
 // FacilityDashboardPage — 설비별 부품 사용 이력 차트 대시보드
 // ============================================================
-function FacilityDashboardPage({ facilityName, inventoryData, selectedSheet, onBack, onGoDetail, showToast }) {
+function FacilityDashboardPage({ facilityName, inventoryData, selectedSheet, onBack, onGoDetail, showToast, userName, onInventoryUpdate }) {
   const [activeTab, setActiveTab] = useState('analysis'); // 'analysis' | 'history' | 'risk'
   const [facilityLogs, setFacilityLogs] = useState([]);
   const [loadingLogs, setLoadingLogs] = useState(true);
@@ -1821,7 +1825,7 @@ function FacilityDashboardPage({ facilityName, inventoryData, selectedSheet, onB
                 </div>
               </div>
 
-              {/* 재고 현황 목록 */}
+              {/* 재고 현황 목록 — DetailPage 동일 UI */}
               <div style={{ marginTop: '4px' }}>
                 <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#1a1f2e', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   📦 재고 현황
@@ -1830,44 +1834,17 @@ function FacilityDashboardPage({ facilityName, inventoryData, selectedSheet, onB
                 {facilityItems.length === 0 ? (
                   <div style={{ textAlign: 'center', color: '#9ca3af', padding: '20px 0', fontSize: '0.82rem' }}>등록된 부품이 없습니다</div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
-                    {facilityItems.map(item => {
-                      const isLow = item.최소보유수량 > 0 && item.현재수량 <= item.최소보유수량;
-                      const isEmpty = item.현재수량 === 0;
-                      const borderColor = isEmpty ? '#dc2626' : isLow ? '#ea580c' : '#e2e6ea';
-                      const qtyColor = isEmpty ? '#dc2626' : isLow ? '#ea580c' : '#16a34a';
-                      const monthUsed = partConsumption[item.모델명]?.total || 0;
-                      return (
-                        <div key={item.id} style={{
-                          background: '#fff', borderRadius: '10px', padding: '10px 12px',
-                          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-                          borderLeft: `3px solid ${borderColor}`,
-                        }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#1a1f2e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {isEmpty && '🔴 '}{isLow && !isEmpty && '🟡 '}{item.모델명}
-                              </div>
-                              <div style={{ fontSize: '0.65rem', color: '#6b7280', marginTop: '1px' }}>
-                                {item.부품종류}{item.용도 ? ` · ${item.용도}` : ''}
-                              </div>
-                            </div>
-                            <div style={{ textAlign: 'right', marginLeft: '10px', flexShrink: 0 }}>
-                              <div style={{ fontSize: '1rem', fontWeight: 800, color: qtyColor }}>{item.현재수량}</div>
-                              <div style={{ fontSize: '0.6rem', color: '#9ca3af' }}>
-                                최소 {item.최소보유수량 || '-'}
-                              </div>
-                            </div>
-                          </div>
-                          {monthUsed > 0 && (
-                            <div style={{ marginTop: '6px', fontSize: '0.63rem', color: '#6b7280', background: '#f9fafb', borderRadius: '5px', padding: '3px 7px', display: 'inline-block' }}>
-                              이달 출고 {monthUsed}개 ({partConsumption[item.모델명]?.count || 0}회)
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <DetailPage
+                    items={facilityItems}
+                    categoryName={facilityName}
+                    onBack={() => {}}
+                    onUpdate={onInventoryUpdate}
+                    userName={userName}
+                    highlightId={null}
+                    showToast={showToast}
+                    isCommonSheet={selectedSheet === '공통'}
+                    hideHeader={true}
+                  />
                 )}
               </div>
             </div>
