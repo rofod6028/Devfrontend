@@ -376,6 +376,7 @@ function App() {
   const [selectedSheet, setSelectedSheet] = useState(null);
   const [facilities, setFacilities] = useState([]);
   const [toasts, setToasts] = useState([]);
+  const [dashboardFacility, setDashboardFacility] = useState(null);
   
 
   // ============================================================
@@ -469,7 +470,8 @@ function App() {
     
     setDetailItems(filteredItems); 
     setSelectedCategory(facilityName); // 상세페이지 제목으로 표시
-    setPage('detail'); // 부품 리스트(상세) 페이지로 이동
+    setDashboardFacility(facilityName);
+    setPage('facilityDashboard'); // 설비 대시보드로 이동
   };
 
   // ✨ 브라우저 알림 권한 요청
@@ -600,12 +602,24 @@ function App() {
         <DetailPage
           items={detailItems}
           categoryName={selectedCategory}
-          onBack={() => setPage('facility')}
+          onBack={() => setPage('facilityDashboard')}
           onUpdate={refreshData}
           userName={userName}
           highlightId={highlightId}
           showToast={showToast}
           isCommonSheet={selectedSheet === '공통'}
+        />
+      );
+
+    case 'facilityDashboard': // 설비 대시보드 (차트 + 이력)
+      return (
+        <FacilityDashboardPage
+          facilityName={dashboardFacility}
+          inventoryData={inventoryData}
+          selectedSheet={selectedSheet}
+          onBack={() => setPage('facility')}
+          onGoDetail={() => setPage('detail')}
+          showToast={showToast}
         />
       );
 
@@ -1554,6 +1568,340 @@ function AIChatBar({ onInventoryUpdate, showToast }) {
           </svg>
         </button>
       </div>
+    </div>
+  );
+}
+
+// ============================================================
+// FacilityDashboardPage — 설비별 부품 사용 이력 차트 대시보드
+// ============================================================
+function FacilityDashboardPage({ facilityName, inventoryData, selectedSheet, onBack, onGoDetail, showToast }) {
+  const [activeTab, setActiveTab] = useState('analysis'); // 'analysis' | 'history' | 'risk'
+  const [facilityLogs, setFacilityLogs] = useState([]);
+  const [loadingLogs, setLoadingLogs] = useState(true);
+
+  // 해당 설비 재고 아이템
+  const facilityItems = inventoryData.filter(item => {
+    if (item.원본시트 !== selectedSheet) return false;
+    if (selectedSheet === '공통') return item.적용설비 === facilityName;
+    return (item.표준설비명 || item.적용설비) === facilityName;
+  });
+
+  useEffect(() => {
+    async function fetchLogs() {
+      setLoadingLogs(true);
+      try {
+        const res = await axios.get(`${BASE_URL}/inventory/facility-logs?facility=${encodeURIComponent(facilityName)}&limit=500`);
+        setFacilityLogs(res.data.data || []);
+      } catch (e) {
+        console.error('설비이력 로드 실패:', e);
+        setFacilityLogs([]);
+      } finally {
+        setLoadingLogs(false);
+      }
+    }
+    fetchLogs();
+  }, [facilityName]);
+
+  // ── 소모 분석 데이터 계산 ──
+  const outLogs = facilityLogs.filter(l => l.변경수량 < 0 || l.action === '출고');
+
+  // 부품별 총 출고량
+  const partConsumption = {};
+  outLogs.forEach(log => {
+    const key = log.모델명 || '미상';
+    const partType = log.부품종류 || '';
+    const qty = Math.abs(Number(log.변경수량) || 0);
+    if (!partConsumption[key]) partConsumption[key] = { model: key, partType, total: 0, count: 0 };
+    partConsumption[key].total += qty;
+    partConsumption[key].count += 1;
+  });
+
+  const sortedParts = Object.values(partConsumption)
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 10);
+
+  const maxTotal = sortedParts[0]?.total || 1;
+
+  // 월별 출고 추이 (최근 6개월)
+  const monthlyTrend = {};
+  outLogs.forEach(log => {
+    const raw = log.timestampKR || '';
+    const match = raw.match(/(\d{4})\.\s*(\d{1,2})\./);
+    if (!match) return;
+    const key = `${match[1]}.${match[2].padStart(2,'0')}`;
+    if (!monthlyTrend[key]) monthlyTrend[key] = 0;
+    monthlyTrend[key] += Math.abs(Number(log.변경수량) || 0);
+  });
+  const trendEntries = Object.entries(monthlyTrend).sort(([a],[b]) => a.localeCompare(b)).slice(-6);
+  const maxTrend = Math.max(...trendEntries.map(([,v]) => v), 1);
+
+  // 재고 부족 위험 부품
+  const riskItems = facilityItems
+    .filter(item => item.최소보유수량 > 0)
+    .map(item => {
+      const cons = partConsumption[item.모델명];
+      const avgPerEvent = cons ? (cons.total / cons.count) : 0;
+      const daysToEmpty = avgPerEvent > 0 ? Math.floor(item.현재수량 / avgPerEvent * 30) : null;
+      return { ...item, avgPerEvent: avgPerEvent.toFixed(1), daysToEmpty, riskLevel: item.현재수량 === 0 ? 'critical' : item.현재수량 <= item.최소보유수량 ? 'warning' : 'ok' };
+    })
+    .sort((a, b) => {
+      const order = { critical: 0, warning: 1, ok: 2 };
+      return order[a.riskLevel] - order[b.riskLevel];
+    });
+
+  const riskColor = { critical: '#dc2626', warning: '#ea580c', ok: '#16a34a' };
+  const riskLabel = { critical: '🔴 재고소진', warning: '🟡 부족경고', ok: '🟢 정상' };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+      {/* 헤더 */}
+      <div className="detail-header">
+        <button className="back-btn" onClick={onBack}>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12,19 5,12 12,5" />
+          </svg>
+          설비 선택으로
+        </button>
+        <div className="detail-category-header">
+          <h2 className="main-cat-title" style={{ fontSize: '1.05rem' }}>{facilityName}</h2>
+          <span className="sub-cat-badge">대시보드</span>
+        </div>
+      </div>
+
+      {/* 요약 카드 */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', padding: '12px 0 4px' }}>
+        {[
+          { label: '등록 부품', value: facilityItems.length + '종', color: '#2563eb', bg: '#dbeafe' },
+          { label: '총 출고건', value: outLogs.length + '건', color: '#7c3aed', bg: '#ede9fe' },
+          { label: '부족 부품', value: facilityItems.filter(i => i.최소보유수량 > 0 && i.현재수량 <= i.최소보유수량).length + '종', color: '#dc2626', bg: '#fee2e2' },
+        ].map(card => (
+          <div key={card.label} style={{ background: card.bg, borderRadius: '10px', padding: '10px 8px', textAlign: 'center' }}>
+            <div style={{ fontSize: '1.2rem', fontWeight: 800, color: card.color }}>{card.value}</div>
+            <div style={{ fontSize: '0.7rem', color: '#6b7280', marginTop: '2px', fontWeight: 500 }}>{card.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* 탭 */}
+      <div style={{ display: 'flex', borderBottom: '2px solid #e2e6ea', marginTop: '10px' }}>
+        {[
+          { id: 'analysis', icon: '📊', label: '소모 분석' },
+          { id: 'history', icon: '📋', label: '이력 목록' },
+          { id: 'risk', icon: '⚠️', label: '위험 예측' },
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            style={{
+              flex: 1, border: 'none', background: 'none', padding: '10px 4px',
+              fontSize: '0.78rem', fontWeight: activeTab === tab.id ? 700 : 500,
+              color: activeTab === tab.id ? '#2563eb' : '#6b7280',
+              borderBottom: activeTab === tab.id ? '2.5px solid #2563eb' : '2.5px solid transparent',
+              marginBottom: '-2px', cursor: 'pointer', transition: 'all 0.15s',
+            }}
+          >
+            {tab.icon} {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {loadingLogs ? (
+        <div className="loading-spinner"><div className="spinner"></div><p>이력 로드 중...</p></div>
+      ) : (
+        <div style={{ paddingTop: '14px' }}>
+
+          {/* ── 탭1: 소모 분석 ── */}
+          {activeTab === 'analysis' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+
+              {/* 부품별 소모량 바 차트 */}
+              <div style={{ background: '#fff', borderRadius: '12px', padding: '14px', boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
+                <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1a1f2e', marginBottom: '12px' }}>
+                  🔧 부품별 누적 출고량 (상위 10개)
+                </div>
+                {sortedParts.length === 0 ? (
+                  <div style={{ textAlign: 'center', color: '#9ca3af', padding: '20px 0', fontSize: '0.82rem' }}>출고 이력이 없습니다</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '9px' }}>
+                    {sortedParts.map((part, i) => {
+                      const pct = (part.total / maxTotal) * 100;
+                      // 현재 재고 조회
+                      const currentItem = facilityItems.find(item => item.모델명 === part.model);
+                      const isLow = currentItem && currentItem.최소보유수량 > 0 && currentItem.현재수량 <= currentItem.최소보유수량;
+                      const barColor = isLow ? '#dc2626' : i < 3 ? '#2563eb' : '#60a5fa';
+                      return (
+                        <div key={part.model}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.73rem', color: '#374151', fontWeight: 600, maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {isLow && <span style={{ color: '#dc2626', marginRight: '3px' }}>⚠</span>}
+                              {part.model}
+                              {part.partType && <span style={{ color: '#9ca3af', marginLeft: '4px', fontWeight: 400, fontSize: '0.68rem' }}>{part.partType}</span>}
+                            </span>
+                            <span style={{ fontSize: '0.72rem', color: barColor, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                              {part.total}개 ({part.count}회)
+                            </span>
+                          </div>
+                          <div style={{ background: '#f3f4f6', borderRadius: '4px', height: '8px', overflow: 'hidden' }}>
+                            <div style={{
+                              height: '100%', width: `${pct}%`, borderRadius: '4px',
+                              background: barColor, transition: 'width 0.6s ease',
+                            }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* 월별 출고 추이 */}
+              <div style={{ background: '#fff', borderRadius: '12px', padding: '14px', boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
+                <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1a1f2e', marginBottom: '12px' }}>
+                  📅 월별 출고 추이 (최근 6개월)
+                </div>
+                {trendEntries.length === 0 ? (
+                  <div style={{ textAlign: 'center', color: '#9ca3af', padding: '20px 0', fontSize: '0.82rem' }}>데이터 없음</div>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', height: '90px', padding: '0 4px' }}>
+                    {trendEntries.map(([month, val]) => {
+                      const barH = Math.max((val / maxTrend) * 70, 4);
+                      return (
+                        <div key={month} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                          <div style={{ fontSize: '0.65rem', color: '#6b7280', fontWeight: 600 }}>{val}</div>
+                          <div style={{ width: '100%', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', height: '70px' }}>
+                            <div style={{
+                              width: '70%', height: `${barH}px`, borderRadius: '4px 4px 0 0',
+                              background: 'linear-gradient(180deg, #3b82f6 0%, #2563eb 100%)',
+                              transition: 'height 0.5s ease',
+                            }} />
+                          </div>
+                          <div style={{ fontSize: '0.62rem', color: '#9ca3af', textAlign: 'center', lineHeight: 1.2 }}>
+                            {month.replace(/^\d{4}\./, '')}월
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* 재고 현황 바로가기 */}
+              <button
+                onClick={onGoDetail}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                  width: '100%', padding: '12px', background: '#dbeafe', color: '#2563eb',
+                  border: 'none', borderRadius: '10px', fontSize: '0.82rem', fontWeight: 700,
+                  cursor: 'pointer', transition: 'background 0.2s',
+                }}
+              >
+                📦 {facilityName} 재고 현황 바로가기 →
+              </button>
+            </div>
+          )}
+
+          {/* ── 탭2: 이력 목록 ── */}
+          {activeTab === 'history' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {facilityLogs.length === 0 ? (
+                <div style={{ textAlign: 'center', color: '#9ca3af', padding: '30px 0', fontSize: '0.85rem' }}>이력이 없습니다</div>
+              ) : (
+                facilityLogs.map(log => {
+                  const isOut = log.변경수량 < 0 || log.action === '출고';
+                  return (
+                    <div key={log.id} style={{
+                      background: '#fff', borderRadius: '10px', padding: '11px 13px',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+                      borderLeft: `3px solid ${isOut ? '#dc2626' : '#16a34a'}`,
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                        <span style={{
+                          fontSize: '0.7rem', fontWeight: 700, padding: '2px 7px', borderRadius: '5px',
+                          background: isOut ? '#fee2e2' : '#dcfce7', color: isOut ? '#dc2626' : '#16a34a',
+                        }}>
+                          {isOut ? '📤 출고' : '📥 입고'}
+                        </span>
+                        <span style={{ fontSize: '0.68rem', color: '#9ca3af' }}>{log.timestampKR}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#1a1f2e' }}>{log.모델명}</div>
+                          <div style={{ fontSize: '0.68rem', color: '#6b7280', marginTop: '1px' }}>{log.부품종류}</div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: '0.85rem', fontWeight: 800, color: isOut ? '#dc2626' : '#16a34a' }}>
+                            {isOut ? '' : '+'}{log.변경수량}
+                          </div>
+                          <div style={{ fontSize: '0.65rem', color: '#9ca3af' }}>
+                            {log.변경전수량} → {log.변경후수량}
+                          </div>
+                        </div>
+                      </div>
+                      {log.user && (
+                        <div style={{ marginTop: '4px', fontSize: '0.65rem', color: '#9ca3af' }}>👤 {log.user}</div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
+
+          {/* ── 탭3: 위험 예측 ── */}
+          {activeTab === 'risk' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ background: '#fffbeb', borderRadius: '10px', padding: '10px 13px', fontSize: '0.75rem', color: '#92400e', border: '1px solid #fde68a', lineHeight: 1.6 }}>
+                💡 최소보유수량이 설정된 부품 기준으로, 출고 이력을 바탕해 현재 재고의 위험도를 분석합니다.
+              </div>
+              {riskItems.length === 0 ? (
+                <div style={{ textAlign: 'center', color: '#9ca3af', padding: '30px 0', fontSize: '0.85rem' }}>최소보유수량이 설정된 부품이 없습니다</div>
+              ) : (
+                riskItems.map(item => (
+                  <div key={item.id} style={{
+                    background: '#fff', borderRadius: '10px', padding: '12px 13px',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+                    borderLeft: `3px solid ${riskColor[item.riskLevel]}`,
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
+                          <span style={{ fontSize: '0.7rem', fontWeight: 700, color: riskColor[item.riskLevel] }}>
+                            {riskLabel[item.riskLevel]}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#1a1f2e' }}>{item.모델명}</div>
+                        <div style={{ fontSize: '0.68rem', color: '#6b7280', marginTop: '1px' }}>{item.부품종류}</div>
+                      </div>
+                      <div style={{ textAlign: 'right', minWidth: '70px' }}>
+                        <div style={{ fontSize: '1.1rem', fontWeight: 800, color: riskColor[item.riskLevel] }}>{item.현재수량}</div>
+                        <div style={{ fontSize: '0.65rem', color: '#9ca3af' }}>현재수량</div>
+                      </div>
+                    </div>
+                    <div style={{ marginTop: '8px', display: 'flex', gap: '8px' }}>
+                      <div style={{ flex: 1, background: '#f9fafb', borderRadius: '7px', padding: '6px 8px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151' }}>{item.최소보유수량}</div>
+                        <div style={{ fontSize: '0.62rem', color: '#9ca3af' }}>최소보유</div>
+                      </div>
+                      <div style={{ flex: 1, background: '#f9fafb', borderRadius: '7px', padding: '6px 8px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151' }}>{item.avgPerEvent}</div>
+                        <div style={{ fontSize: '0.62rem', color: '#9ca3af' }}>회당출고</div>
+                      </div>
+                      <div style={{ flex: 2, background: '#f9fafb', borderRadius: '7px', padding: '6px 8px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: item.daysToEmpty !== null && item.daysToEmpty < 30 ? '#dc2626' : '#374151' }}>
+                          {item.daysToEmpty !== null ? `약 ${item.daysToEmpty}일` : '데이터 없음'}
+                        </div>
+                        <div style={{ fontSize: '0.62rem', color: '#9ca3af' }}>예상 소진 시점</div>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+        </div>
+      )}
     </div>
   );
 }
