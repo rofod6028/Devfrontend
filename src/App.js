@@ -996,6 +996,16 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
   // 방안C: 공통부품 출고 시 설비 선택 팝업
   const [commonPopup, setCommonPopup] = useState(null); // { item, newQty, oldQty }
   const [selectedFacility, setSelectedFacility] = useState('');
+  const [facilitySearch, setFacilitySearch] = useState('');
+  const [showFacilityDropdown, setShowFacilityDropdown] = useState(false);
+
+  // 드롭다운 외부 클릭 시 닫기
+  useEffect(() => {
+    if (!showFacilityDropdown) return;
+    const handler = () => setShowFacilityDropdown(false);
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showFacilityDropdown]);
 
   // ✨ [추가] 검색된 부품 위치로 부드럽게 자동 스크롤하는 효과
   useEffect(() => {
@@ -1023,6 +1033,8 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
     if (isCommonPart && isOutgoing) {
       setCommonPopup({ item, newQty: editValue, oldQty: item.현재수량 });
       setSelectedFacility('');
+      setFacilitySearch('');
+      setShowFacilityDropdown(false);
       return;
     }
     await doSave(item, editValue, item.현재수량, null);
@@ -1064,6 +1076,8 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
   const handleCancel = () => {
     setEditingId(null);
     setCommonPopup(null);
+    setFacilitySearch('');
+    setShowFacilityDropdown(false);
   };
 
   return (
@@ -1084,9 +1098,9 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
             </div>
             <div style={{ fontSize: '0.78rem', color: '#6b7280', marginBottom: '16px', lineHeight: 1.5 }}>
               <strong style={{ color: '#2563eb' }}>{commonPopup.item.모델명}</strong>은 공통 부품입니다.<br/>
-              실제로 사용할 설비를 입력하거나 선택해 주세요.
+              실제로 사용할 설비를 검색하거나 직접 입력해 주세요.
             </div>
-            {/* 설비 목록 버튼 (충전/타정 시트 설비만) */}
+            {/* 검색창 + 드롭다운 방식 */}
             {(() => {
               const facilitySet = new Set(
                 (inventoryData || [])
@@ -1095,38 +1109,84 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
                   .filter(Boolean)
               );
               const facilityList = [...facilitySet].sort();
-              return facilityList.length > 0 ? (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '10px' }}>
-                  {facilityList.map(f => (
-                    <button
-                      key={f}
-                      onClick={() => setSelectedFacility(f)}
-                      style={{
-                        padding: '5px 10px', borderRadius: '20px', fontSize: '0.75rem', cursor: 'pointer',
-                        border: selectedFacility === f ? '2px solid #2563eb' : '1.5px solid #e5e7eb',
-                        background: selectedFacility === f ? '#eff6ff' : '#f9fafb',
-                        color: selectedFacility === f ? '#2563eb' : '#374151',
-                        fontWeight: selectedFacility === f ? 700 : 500,
+              const filtered = facilityList.filter(f =>
+                f.toLowerCase().includes(facilitySearch.toLowerCase())
+              );
+              return (
+                <div style={{ position: 'relative', marginBottom: '12px' }}>
+                  <div style={{ position: 'relative' }}>
+                    <span style={{
+                      position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)',
+                      fontSize: '0.95rem', color: '#9ca3af', pointerEvents: 'none'
+                    }}>🔍</span>
+                    <input
+                      type="text"
+                      placeholder="설비명 검색 또는 직접 입력..."
+                      value={facilitySearch}
+                      onChange={e => {
+                        setFacilitySearch(e.target.value);
+                        setSelectedFacility(e.target.value);
+                        setShowFacilityDropdown(true);
                       }}
-                    >
-                      {f}
-                    </button>
-                  ))}
+                      onFocus={() => setShowFacilityDropdown(true)}
+                      style={{
+                        width: '100%', padding: '10px 12px 10px 34px',
+                        borderRadius: showFacilityDropdown && filtered.length > 0 ? '8px 8px 0 0' : '8px',
+                        border: '1.5px solid #2563eb', fontSize: '0.88rem',
+                        boxSizing: 'border-box', outline: 'none',
+                        background: '#f8faff',
+                      }}
+                    />
+                  </div>
+                  {/* 드롭다운 목록 */}
+                  {showFacilityDropdown && filtered.length > 0 && (
+                    <div style={{
+                      position: 'absolute', left: 0, right: 0, zIndex: 10,
+                      background: '#fff',
+                      border: '1.5px solid #2563eb', borderTop: 'none',
+                      borderRadius: '0 0 8px 8px',
+                      maxHeight: '180px', overflowY: 'auto',
+                      boxShadow: '0 4px 16px rgba(37,99,235,0.10)',
+                    }}>
+                      {filtered.map((f, idx) => (
+                        <div
+                          key={f}
+                          onClick={() => {
+                            setSelectedFacility(f);
+                            setFacilitySearch(f);
+                            setShowFacilityDropdown(false);
+                          }}
+                          style={{
+                            padding: '9px 14px',
+                            fontSize: '0.85rem',
+                            color: selectedFacility === f ? '#2563eb' : '#1a1f2e',
+                            background: selectedFacility === f ? '#eff6ff' : idx % 2 === 0 ? '#fafafa' : '#fff',
+                            fontWeight: selectedFacility === f ? 700 : 400,
+                            cursor: 'pointer',
+                            borderBottom: idx < filtered.length - 1 ? '1px solid #f0f0f0' : 'none',
+                            transition: 'background 0.15s',
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = '#eff6ff'}
+                          onMouseLeave={e => e.currentTarget.style.background = selectedFacility === f ? '#eff6ff' : idx % 2 === 0 ? '#fafafa' : '#fff'}
+                        >
+                          {f}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              ) : null;
+              );
             })()}
-            <input
-              type="text"
-              placeholder="또는 직접 입력: 립스틱충전기#1"
-              value={selectedFacility}
-              onChange={e => setSelectedFacility(e.target.value)}
-              style={{
-                width: '100%', padding: '10px 12px', borderRadius: '8px',
-                border: '1.5px solid #d1d5db', fontSize: '0.9rem',
-                boxSizing: 'border-box', marginBottom: '12px',
-                outline: 'none',
-              }}
-            />
+            {/* 선택된 설비 표시 */}
+            {selectedFacility.trim() && (
+              <div style={{
+                fontSize: '0.78rem', color: '#2563eb', marginBottom: '10px',
+                background: '#eff6ff', borderRadius: '6px', padding: '5px 10px',
+                fontWeight: 600,
+              }}>
+                ✓ 선택됨: {selectedFacility}
+              </div>
+            )}
             <div style={{ display: 'flex', gap: '8px' }}>
               <button
                 onClick={() => doSave(commonPopup.item, commonPopup.newQty, commonPopup.oldQty, selectedFacility)}
