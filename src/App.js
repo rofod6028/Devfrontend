@@ -449,8 +449,9 @@ function App() {
     const sheetItems = inventoryData.filter(item => item.원본시트 === sheetName);
     console.log(`   "${sheetName}" 필터링 결과: ${sheetItems.length}건`, sheetItems);
     
-    // 해당 시트 내의 '적용설비' 중복 제거하여 추출
-    const uniqueFacilities = [...new Set(sheetItems.map(item => item.적용설비))];
+    // 해당 시트 내의 설비 추출 — 공통 탭은 적용설비 그대로, 나머지는 표준설비명 기준
+    const facilityKey = sheetName === '공통' ? '적용설비' : '표준설비명';
+    const uniqueFacilities = [...new Set(sheetItems.map(item => item[facilityKey] || item.적용설비))];
     console.log(`   추출된 설비: ${uniqueFacilities.length}개`, uniqueFacilities);
     
     setFacilities(uniqueFacilities);
@@ -459,10 +460,12 @@ function App() {
 
   // 2. 설비 페이지에서 특정 설비 클릭 시 실행
   const handleFacilityClick = (facilityName) => {
-    // 해당 공정 + 해당 설비 조건에 맞는 부품만 필터링
-    const filteredItems = inventoryData.filter(item => 
-      item.원본시트 === selectedSheet && item.적용설비 === facilityName
-    );
+    // 공통 탭은 적용설비 기준, 나머지는 표준설비명 기준으로 필터
+    const filteredItems = inventoryData.filter(item => {
+      if (item.원본시트 !== selectedSheet) return false;
+      if (selectedSheet === '공통') return item.적용설비 === facilityName;
+      return (item.표준설비명 || item.적용설비) === facilityName;
+    });
     
     setDetailItems(filteredItems); 
     setSelectedCategory(facilityName); // 상세페이지 제목으로 표시
@@ -602,6 +605,7 @@ function App() {
           userName={userName}
           highlightId={highlightId}
           showToast={showToast}
+          isCommonSheet={selectedSheet === '공통'}
         />
       );
 
@@ -810,7 +814,6 @@ function MainPage({ onSheetClick, onSummaryClick, alerts, onSearch, searchResult
   const processSheets = [
     { name: '충전', desc: '립스틱 / 틴트' },
     { name: '타정', desc: '파우더 / 팩트' },
-    { name: '제조', desc: '원료 배합 / 탱크' },
     { name: '공통', desc: '공용 및 기타' }
   ];
 
@@ -913,10 +916,12 @@ function FacilityPage({ selectedSheet, facilities, onFacilityClick, onBack, inve
       <div className="category-grid" style={{ marginTop: '20px' }}>
         {facilities && facilities.length > 0 ? (
           facilities.map((facility) => {
-            // 해당 설비의 전체 부품 추출
-            const facilityItems = inventoryData.filter(item => 
-              item.원본시트 === selectedSheet && item.적용설비 === facility
-            );
+            // 해당 설비의 전체 부품 추출 (공통 탭은 적용설비, 나머지는 표준설비명 기준)
+            const facilityItems = inventoryData.filter(item => {
+              if (item.원본시트 !== selectedSheet) return false;
+              if (selectedSheet === '공통') return item.적용설비 === facility;
+              return (item.표준설비명 || item.적용설비) === facility;
+            });
             // 재고 부족 항목 계산
             const lowStockCount = facilityItems.filter(item => 
               item.최소보유수량 > 0 && item.현재수량 <= item.최소보유수량
@@ -935,6 +940,9 @@ function FacilityPage({ selectedSheet, facilities, onFacilityClick, onBack, inve
                 <div className="category-label" style={{ fontSize: '1.1rem' }}>{facility}</div>
                 <div className="category-meta">
                   <span className="category-count">{facilityItems.length}개 품목</span>
+                  {facility.endsWith('(공통)') && (
+                    <span style={{ fontSize: '0.72rem', color: '#6366f1', fontWeight: 700, background: '#eef2ff', borderRadius: '6px', padding: '1px 7px', marginLeft: '4px' }}>공통</span>
+                  )}
                   {lowStockCount > 0 && (
                     <span className="low-stock-badge">⚠️ {lowStockCount}</span>
                   )}
@@ -964,7 +972,7 @@ function FacilityPage({ selectedSheet, facilities, onFacilityClick, onBack, inve
 // ============================================================
 // DetailPage (카테고리 클릭 후 리스트 + ✨ 수동 수정 UI)
 // ============================================================
-function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlightId, showToast }) { 
+function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlightId, showToast, isCommonSheet }) { 
   const [editingId, setEditingId] = useState(null);
   const [editValue, setEditValue] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
@@ -1023,8 +1031,14 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
           뒤로
         </button>
         <div className="detail-category-header">
-  <h2 className="main-cat-title">{items[0]?.대분류 || categoryName}</h2>
-  <span className="sub-cat-badge">{categoryName}</span>
+  {isCommonSheet ? (
+    <>
+      <h2 className="main-cat-title">{items[0]?.대분류 || categoryName}</h2>
+      <span className="sub-cat-badge">{categoryName}</span>
+    </>
+  ) : (
+    <h2 className="main-cat-title">{categoryName}</h2>
+  )}
 </div>
       </div>
 
