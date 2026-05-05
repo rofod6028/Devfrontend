@@ -1105,7 +1105,7 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
               const facilitySet = new Set(
                 (inventoryData || [])
                   .filter(d => d.원본시트 !== '공통')
-                  .map(d => d.표준설비명 || d.적용설비)
+                  .map(d => String(d.표준설비명 || d.적용설비 || '').replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim())
                   .filter(Boolean)
               );
               const facilityList = [...facilitySet].sort();
@@ -1158,8 +1158,9 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
                           onMouseDown={e => {
                             // 문제3 핵심: preventDefault로 input blur 막고, 클릭 이벤트 선처리
                             e.preventDefault();
-                            setSelectedFacility(f);
-                            setFacilitySearch(f);
+                            const cleaned = f.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+                            setSelectedFacility(cleaned);
+                            setFacilitySearch(cleaned);
                             setShowFacilityDropdown(false);
                           }}
                           style={{
@@ -1205,7 +1206,7 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
               const facilitySet2 = new Set(
                 (inventoryData || [])
                   .filter(d => d.원본시트 !== '공통')
-                  .map(d => d.표준설비명 || d.적용설비)
+                  .map(d => String(d.표준설비명 || d.적용설비 || '').replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim())
                   .filter(Boolean)
               );
               const facilityList2 = [...facilitySet2];
