@@ -586,9 +586,13 @@ function App() {
     setInventoryData(allData);
     await loadAlerts();
     if (page === 'detail' && selectedSheet && selectedCategory) {
-      const filtered = allData.filter(item =>
-        item.원본시트 === selectedSheet && item.적용설비 === selectedCategory
-      );
+      // handleFacilityClick과 동일한 필터 로직 사용
+      // 공통 탭은 적용설비 기준, 나머지는 표준설비명 기준
+      const filtered = allData.filter(item => {
+        if (item.원본시트 !== selectedSheet) return false;
+        if (selectedSheet === '공통') return item.적용설비 === selectedCategory;
+        return (item.표준설비명 || item.적용설비) === selectedCategory;
+      });
       setDetailItems(filtered);
     }
   }
@@ -1046,8 +1050,12 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
       const isCommonPart = isCommonSheet || item.isCommonPart || String(item.적용설비 || '').includes('공통');
       if (isCommonPart && facilityName) {
         // 공통부품 출고 — 전용 API 호출
+        // 모델명/원본시트/적용설비를 함께 전송 → 서버에서 id 매칭 실패 시 fallback 검색에 사용
         await axios.post(`${BASE_URL}/inventory/common-update`, {
           id: item.id,
+          모델명: item.모델명,
+          원본시트: item.원본시트,
+          적용설비: item.적용설비,
           현재수량: newQty,
           action: '출고',
           user: userName,
@@ -1056,6 +1064,9 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
       } else {
         await axios.post(`${BASE_URL}/inventory/manual-update`, {
           id: item.id,
+          모델명: item.모델명,
+          원본시트: item.원본시트,
+          적용설비: item.적용설비,
           현재수량: newQty,
           action: newQty < oldQty ? '출고' : newQty > oldQty ? '입고' : '수량변경',
           user: userName,
