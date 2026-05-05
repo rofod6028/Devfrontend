@@ -1112,6 +1112,8 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
               const filtered = facilityList.filter(f =>
                 f.toLowerCase().includes(facilitySearch.toLowerCase())
               );
+              // 문제4: 현재 입력값이 실제 설비 목록에 있는지 검증
+              const isValidFacility = facilityList.includes(selectedFacility.trim());
               return (
                 <div style={{ position: 'relative', marginBottom: '12px' }}>
                   <div style={{ position: 'relative' }}>
@@ -1121,24 +1123,26 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
                     }}>🔍</span>
                     <input
                       type="text"
-                      placeholder="설비명 검색 또는 직접 입력..."
+                      placeholder="설비명 검색 후 선택해 주세요..."
                       value={facilitySearch}
                       onChange={e => {
                         setFacilitySearch(e.target.value);
-                        setSelectedFacility(e.target.value);
+                        // 직접 입력 중엔 selectedFacility를 비워 검증 실패 처리
+                        setSelectedFacility('');
                         setShowFacilityDropdown(true);
                       }}
                       onFocus={() => setShowFacilityDropdown(true)}
                       style={{
                         width: '100%', padding: '10px 12px 10px 34px',
                         borderRadius: showFacilityDropdown && filtered.length > 0 ? '8px 8px 0 0' : '8px',
-                        border: '1.5px solid #2563eb', fontSize: '0.88rem',
+                        border: `1.5px solid ${isValidFacility ? '#16a34a' : '#2563eb'}`,
+                        fontSize: '0.88rem',
                         boxSizing: 'border-box', outline: 'none',
-                        background: '#f8faff',
+                        background: isValidFacility ? '#f0fdf4' : '#f8faff',
                       }}
                     />
                   </div>
-                  {/* 드롭다운 목록 */}
+                  {/* 드롭다운 목록 — 문제3: onClick 대신 onMouseDown으로 교체해 blur보다 먼저 실행 */}
                   {showFacilityDropdown && filtered.length > 0 && (
                     <div style={{
                       position: 'absolute', left: 0, right: 0, zIndex: 10,
@@ -1151,7 +1155,9 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
                       {filtered.map((f, idx) => (
                         <div
                           key={f}
-                          onClick={() => {
+                          onMouseDown={e => {
+                            // 문제3 핵심: preventDefault로 input blur 막고, 클릭 이벤트 선처리
+                            e.preventDefault();
                             setSelectedFacility(f);
                             setFacilitySearch(f);
                             setShowFacilityDropdown(false);
@@ -1159,19 +1165,27 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
                           style={{
                             padding: '9px 14px',
                             fontSize: '0.85rem',
-                            color: selectedFacility === f ? '#2563eb' : '#1a1f2e',
-                            background: selectedFacility === f ? '#eff6ff' : idx % 2 === 0 ? '#fafafa' : '#fff',
+                            color: selectedFacility === f ? '#16a34a' : '#1a1f2e',
+                            background: selectedFacility === f ? '#f0fdf4' : idx % 2 === 0 ? '#fafafa' : '#fff',
                             fontWeight: selectedFacility === f ? 700 : 400,
                             cursor: 'pointer',
                             borderBottom: idx < filtered.length - 1 ? '1px solid #f0f0f0' : 'none',
-                            transition: 'background 0.15s',
                           }}
                           onMouseEnter={e => e.currentTarget.style.background = '#eff6ff'}
-                          onMouseLeave={e => e.currentTarget.style.background = selectedFacility === f ? '#eff6ff' : idx % 2 === 0 ? '#fafafa' : '#fff'}
+                          onMouseLeave={e => e.currentTarget.style.background = selectedFacility === f ? '#f0fdf4' : idx % 2 === 0 ? '#fafafa' : '#fff'}
                         >
                           {f}
                         </div>
                       ))}
+                    </div>
+                  )}
+                  {/* 문제4: 입력했지만 목록에 없는 경우 경고 */}
+                  {facilitySearch.trim() && !isValidFacility && filtered.length === 0 && (
+                    <div style={{
+                      marginTop: '4px', fontSize: '0.75rem', color: '#dc2626',
+                      background: '#fef2f2', borderRadius: '6px', padding: '4px 10px',
+                    }}>
+                      ⚠️ 존재하지 않는 설비입니다. 목록에서 선택해 주세요.
                     </div>
                   )}
                 </div>
@@ -1180,21 +1194,37 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
             {/* 선택된 설비 표시 */}
             {selectedFacility.trim() && (
               <div style={{
-                fontSize: '0.78rem', color: '#2563eb', marginBottom: '10px',
-                background: '#eff6ff', borderRadius: '6px', padding: '5px 10px',
+                fontSize: '0.78rem', color: '#16a34a', marginBottom: '10px',
+                background: '#f0fdf4', borderRadius: '6px', padding: '5px 10px',
                 fontWeight: 600,
               }}>
                 ✓ 선택됨: {selectedFacility}
               </div>
             )}
+            {(() => {
+              const facilitySet2 = new Set(
+                (inventoryData || [])
+                  .filter(d => d.원본시트 !== '공통')
+                  .map(d => d.표준설비명 || d.적용설비)
+                  .filter(Boolean)
+              );
+              const facilityList2 = [...facilitySet2];
+              const isValid = facilityList2.includes(selectedFacility.trim());
+              return (
             <div style={{ display: 'flex', gap: '8px' }}>
               <button
-                onClick={() => doSave(commonPopup.item, commonPopup.newQty, commonPopup.oldQty, selectedFacility)}
-                disabled={!selectedFacility.trim() || isSaving}
+                onClick={() => {
+                  if (!isValid) {
+                    showToast('목록에 있는 설비를 선택해 주세요.', 'error');
+                    return;
+                  }
+                  doSave(commonPopup.item, commonPopup.newQty, commonPopup.oldQty, selectedFacility);
+                }}
+                disabled={!isValid || isSaving}
                 style={{
                   flex: 1, padding: '10px', borderRadius: '8px', border: 'none',
-                  background: selectedFacility.trim() ? '#2563eb' : '#9ca3af',
-                  color: '#fff', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer',
+                  background: isValid ? '#2563eb' : '#9ca3af',
+                  color: '#fff', fontWeight: 700, fontSize: '0.85rem', cursor: isValid ? 'pointer' : 'not-allowed',
                 }}
               >
                 {isSaving ? '저장 중...' : '✓ 출고 확인'}
@@ -1210,6 +1240,8 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
                 취소
               </button>
             </div>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -1771,7 +1803,8 @@ function FacilityDashboardPage({ facilityName, inventoryData, selectedSheet, onB
     async function fetchLogs() {
       setLoadingLogs(true);
       try {
-        const res = await axios.get(`${BASE_URL}/inventory/facility-logs?facility=${encodeURIComponent(facilityName)}&limit=500`);
+        const isCommonSheet = selectedSheet === '공통';
+        const res = await axios.get(`${BASE_URL}/inventory/facility-logs?facility=${encodeURIComponent(facilityName)}&limit=500&isCommon=${isCommonSheet}`);
         setFacilityLogs(res.data.data || []);
       } catch (e) {
         console.error('설비이력 로드 실패:', e);
