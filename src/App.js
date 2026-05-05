@@ -608,6 +608,7 @@ function App() {
           highlightId={highlightId}
           showToast={showToast}
           isCommonSheet={selectedSheet === '공통'}
+          inventoryData={inventoryData}
         />
       );
 
@@ -988,7 +989,7 @@ function FacilityPage({ selectedSheet, facilities, onFacilityClick, onBack, inve
 // ============================================================
 // DetailPage (카테고리 클릭 후 리스트 + ✨ 수동 수정 UI)
 // ============================================================
-function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlightId, showToast, isCommonSheet, hideHeader }) { 
+function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlightId, showToast, isCommonSheet, hideHeader, inventoryData }) { 
   const [editingId, setEditingId] = useState(null);
   const [editValue, setEditValue] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
@@ -1017,7 +1018,7 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
 
   const handleSave = async (item) => {
     // 방안C: 공통부품 출고(수량 감소)인 경우 설비 선택 팝업 먼저 띄우기
-    const isCommonPart = item.isCommonPart || String(item.적용설비 || '').includes('공통');
+    const isCommonPart = isCommonSheet || item.isCommonPart || String(item.적용설비 || '').includes('공통');
     const isOutgoing = editValue < item.현재수량;
     if (isCommonPart && isOutgoing) {
       setCommonPopup({ item, newQty: editValue, oldQty: item.현재수량 });
@@ -1030,7 +1031,7 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
   const doSave = async (item, newQty, oldQty, facilityName) => {
     try {
       setIsSaving(true);
-      const isCommonPart = item.isCommonPart || String(item.적용설비 || '').includes('공통');
+      const isCommonPart = isCommonSheet || item.isCommonPart || String(item.적용설비 || '').includes('공통');
       if (isCommonPart && facilityName) {
         // 공통부품 출고 — 전용 API 호출
         await axios.post(`${BASE_URL}/inventory/common-update`, {
@@ -1085,9 +1086,38 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
               <strong style={{ color: '#2563eb' }}>{commonPopup.item.모델명}</strong>은 공통 부품입니다.<br/>
               실제로 사용할 설비를 입력하거나 선택해 주세요.
             </div>
+            {/* 설비 목록 버튼 (충전/타정 시트 설비만) */}
+            {(() => {
+              const facilitySet = new Set(
+                (inventoryData || [])
+                  .filter(d => d.원본시트 !== '공통')
+                  .map(d => d.표준설비명 || d.적용설비)
+                  .filter(Boolean)
+              );
+              const facilityList = [...facilitySet].sort();
+              return facilityList.length > 0 ? (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '10px' }}>
+                  {facilityList.map(f => (
+                    <button
+                      key={f}
+                      onClick={() => setSelectedFacility(f)}
+                      style={{
+                        padding: '5px 10px', borderRadius: '20px', fontSize: '0.75rem', cursor: 'pointer',
+                        border: selectedFacility === f ? '2px solid #2563eb' : '1.5px solid #e5e7eb',
+                        background: selectedFacility === f ? '#eff6ff' : '#f9fafb',
+                        color: selectedFacility === f ? '#2563eb' : '#374151',
+                        fontWeight: selectedFacility === f ? 700 : 500,
+                      }}
+                    >
+                      {f}
+                    </button>
+                  ))}
+                </div>
+              ) : null;
+            })()}
             <input
               type="text"
-              placeholder="예: 립스틱충전기#1"
+              placeholder="또는 직접 입력: 립스틱충전기#1"
               value={selectedFacility}
               onChange={e => setSelectedFacility(e.target.value)}
               style={{
@@ -1096,7 +1126,6 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
                 boxSizing: 'border-box', marginBottom: '12px',
                 outline: 'none',
               }}
-              autoFocus
             />
             <div style={{ display: 'flex', gap: '8px' }}>
               <button
@@ -1976,6 +2005,7 @@ function FacilityDashboardPage({ facilityName, inventoryData, selectedSheet, onB
                     showToast={showToast}
                     isCommonSheet={selectedSheet === '공통'}
                     hideHeader={true}
+                    inventoryData={inventoryData}
                   />
                 )}
               </div>
