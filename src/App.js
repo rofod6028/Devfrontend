@@ -393,25 +393,13 @@ function App() {
   // ============================================================
   const navigateToItem = (item) => {
     setHighlightId(item.id);
-    // alerts API는 원본 항목(적용설비)만 내려주므로 inventoryData에서 동일 id의 표준설비명/설비목록을 가져와 사용
-    const fullItem = inventoryData.find(d => d.id === item.id) || item;
-    const isCommon = fullItem.원본시트 === '공통';
-    const targetFacility = isCommon
-      ? fullItem.적용설비
-      : (fullItem.isMultiUnit && Array.isArray(fullItem.설비목록) && fullItem.설비목록.length > 0
-          ? fullItem.설비목록[0]
-          : (fullItem.표준설비명 || fullItem.적용설비));
-    const filtered = inventoryData.filter(d => {
-      if (d.원본시트 !== fullItem.원본시트) return false;
-      if (isCommon) return d.적용설비 === targetFacility;
-      if (d.isMultiUnit && Array.isArray(d.설비목록)) return d.설비목록.includes(targetFacility);
-      return (d.표준설비명 || d.적용설비) === targetFacility;
-    });
+    const filtered = inventoryData.filter(d =>
+      d.원본시트 === item.원본시트 && d.적용설비 === item.적용설비
+    );
     setDetailItems(filtered);
-    setSelectedSheet(fullItem.원본시트);
-    setSelectedCategory(targetFacility);
-    setDashboardFacility(targetFacility);
-    setPage('facilityDashboard');
+    setSelectedSheet(item.원본시트);
+    setSelectedCategory(item.적용설비);
+    setPage('detail');
   };
 
   // ✨ 알림 체크 (앱 시작 및 주기적)
@@ -674,7 +662,7 @@ function App() {
     default: // 1단계: 메인화면 (공정 선택)
         return (
           <MainPage
-            onSheetClick={(sheetName) => handleSheetClick(sheetName)}
+            onSheetClick={handleSheetClick}
             onSummaryClick={loadSummary}
             alerts={alerts}
             onSearch={handleSearch}
@@ -683,24 +671,13 @@ function App() {
             onSearchResultClick={(item) => {
               setHighlightId(item.id);
               // 검색 결과 클릭 시 해당 아이템의 상세 정보로 바로 이동하는 로직
-              // 공통 탭은 적용설비 그대로, 다중 호기 결합 항목은 첫 번째 개별 호기를 대표로 사용
-              const isCommon = item.원본시트 === '공통';
-              const targetFacility = isCommon
-                ? item.적용설비
-                : (item.isMultiUnit && Array.isArray(item.설비목록) && item.설비목록.length > 0
-                    ? item.설비목록[0]
-                    : (item.표준설비명 || item.적용설비));
-              const filtered = inventoryData.filter(d => {
-                if (d.원본시트 !== item.원본시트) return false;
-                if (isCommon) return d.적용설비 === targetFacility;
-                if (d.isMultiUnit && Array.isArray(d.설비목록)) return d.설비목록.includes(targetFacility);
-                return (d.표준설비명 || d.적용설비) === targetFacility;
-              });
+              const filtered = inventoryData.filter(d => 
+                d.원본시트 === item.원본시트 && d.적용설비 === item.적용설비
+              );
               setDetailItems(filtered);
               setSelectedSheet(item.원본시트);
-              setSelectedCategory(targetFacility);
-              setDashboardFacility(targetFacility);
-              setPage('facilityDashboard');
+              setSelectedCategory(item.적용설비);
+              setPage('detail');
               setSearchResults([]);
               setIsSearching(false);
             }}
