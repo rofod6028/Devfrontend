@@ -393,13 +393,25 @@ function App() {
   // ============================================================
   const navigateToItem = (item) => {
     setHighlightId(item.id);
-    const filtered = inventoryData.filter(d =>
-      d.원본시트 === item.원본시트 && d.적용설비 === item.적용설비
-    );
+    // alerts API는 원본 항목(적용설비)만 내려주므로 inventoryData에서 동일 id의 표준설비명/설비목록을 가져와 사용
+    const fullItem = inventoryData.find(d => d.id === item.id) || item;
+    const isCommon = fullItem.원본시트 === '공통';
+    const targetFacility = isCommon
+      ? fullItem.적용설비
+      : (fullItem.isMultiUnit && Array.isArray(fullItem.설비목록) && fullItem.설비목록.length > 0
+          ? fullItem.설비목록[0]
+          : (fullItem.표준설비명 || fullItem.적용설비));
+    const filtered = inventoryData.filter(d => {
+      if (d.원본시트 !== fullItem.원본시트) return false;
+      if (isCommon) return d.적용설비 === targetFacility;
+      if (d.isMultiUnit && Array.isArray(d.설비목록)) return d.설비목록.includes(targetFacility);
+      return (d.표준설비명 || d.적용설비) === targetFacility;
+    });
     setDetailItems(filtered);
-    setSelectedSheet(item.원본시트);
-    setSelectedCategory(item.적용설비);
-    setPage('detail');
+    setSelectedSheet(fullItem.원본시트);
+    setSelectedCategory(targetFacility);
+    setDashboardFacility(targetFacility);
+    setPage('facilityDashboard');
   };
 
   // ✨ 알림 체크 (앱 시작 및 주기적)
@@ -599,11 +611,9 @@ function App() {
     if (page === 'detail' && selectedSheet && selectedCategory) {
       // handleFacilityClick과 동일한 필터 로직 사용
       // 공통 탭은 적용설비 기준, 나머지는 표준설비명 기준
-      // 다중 호기 결합 항목("충전기#1,2,3,4")은 설비목록에 selectedCategory(개별 호기)가 포함되면 포함
       const filtered = allData.filter(item => {
         if (item.원본시트 !== selectedSheet) return false;
         if (selectedSheet === '공통') return item.적용설비 === selectedCategory;
-        if (item.isMultiUnit && Array.isArray(item.설비목록)) return item.설비목록.includes(selectedCategory);
         return (item.표준설비명 || item.적용설비) === selectedCategory;
       });
       setDetailItems(filtered);
@@ -664,9 +674,7 @@ function App() {
     default: // 1단계: 메인화면 (공정 선택)
         return (
           <MainPage
-            onSheetClick={(sheetName) => {
-              handleSheetClick(sheetName);
-            }}
+            onSheetClick={(sheetName) => handleSheetClick(sheetName)}
             onSummaryClick={loadSummary}
             alerts={alerts}
             onSearch={handleSearch}
@@ -675,15 +683,24 @@ function App() {
             onSearchResultClick={(item) => {
               setHighlightId(item.id);
               // 검색 결과 클릭 시 해당 아이템의 상세 정보로 바로 이동하는 로직
-              // 다중 호기 결합 항목이면 표준설비명(결합 표기) 기준으로, 아니면 적용설비 기준으로 필터링
-              const targetName = item.표준설비명 || item.적용설비;
-              const filtered = inventoryData.filter(d => 
-                d.원본시트 === item.원본시트 && (item.원본시트 === '공통' ? d.적용설비 === item.적용설비 : (d.표준설비명 || d.적용설비) === targetName)
-              );
+              // 공통 탭은 적용설비 그대로, 다중 호기 결합 항목은 첫 번째 개별 호기를 대표로 사용
+              const isCommon = item.원본시트 === '공통';
+              const targetFacility = isCommon
+                ? item.적용설비
+                : (item.isMultiUnit && Array.isArray(item.설비목록) && item.설비목록.length > 0
+                    ? item.설비목록[0]
+                    : (item.표준설비명 || item.적용설비));
+              const filtered = inventoryData.filter(d => {
+                if (d.원본시트 !== item.원본시트) return false;
+                if (isCommon) return d.적용설비 === targetFacility;
+                if (d.isMultiUnit && Array.isArray(d.설비목록)) return d.설비목록.includes(targetFacility);
+                return (d.표준설비명 || d.적용설비) === targetFacility;
+              });
               setDetailItems(filtered);
               setSelectedSheet(item.원본시트);
-              setSelectedCategory(item.원본시트 === '공통' ? item.적용설비 : targetName);
-              setPage('detail');
+              setSelectedCategory(targetFacility);
+              setDashboardFacility(targetFacility);
+              setPage('facilityDashboard');
               setSearchResults([]);
               setIsSearching(false);
             }}
