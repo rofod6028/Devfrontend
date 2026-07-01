@@ -2324,4 +2324,30 @@ function FacilityDashboardPage({ facilityName, inventoryData, selectedSheet, onB
                     </div>
                     <div style={{ marginTop: '8px', display: 'flex', gap: '8px' }}>
                       <div style={{ flex: 1, background: '#f9fafb', borderRadius: '7px', padding: '6px 8px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151' }}>{it
+                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151' }}>{item.최소보유수량}</div>
+                        <div style={{ fontSize: '0.62rem', color: '#9ca3af' }}>최소보유</div>
+                      </div>
+                      <div style={{ flex: 1, background: '#f9fafb', borderRadius: '7px', padding: '6px 8px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151' }}>{item.avgPerEvent}</div>
+                        <div style={{ fontSize: '0.62rem', color: '#9ca3af' }}>회당출고</div>
+                      </div>
+                      <div style={{ flex: 2, background: '#f9fafb', borderRadius: '7px', padding: '6px 8px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: item.daysToEmpty !== null && item.daysToEmpty < 30 ? '#dc2626' : '#374151' }}>
+                          {item.daysToEmpty !== null ? `약 ${item.daysToEmpty}일` : '데이터 없음'}
+                        </div>
+                        <div style={{ fontSize: '0.62rem', color: '#9ca3af' }}>예상 소진 시점</div>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default App;
