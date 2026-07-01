@@ -599,9 +599,11 @@ function App() {
     if (page === 'detail' && selectedSheet && selectedCategory) {
       // handleFacilityClick과 동일한 필터 로직 사용
       // 공통 탭은 적용설비 기준, 나머지는 표준설비명 기준
+      // 다중 호기 결합 항목("충전기#1,2,3,4")은 설비목록에 selectedCategory(개별 호기)가 포함되면 포함
       const filtered = allData.filter(item => {
         if (item.원본시트 !== selectedSheet) return false;
         if (selectedSheet === '공통') return item.적용설비 === selectedCategory;
+        if (item.isMultiUnit && Array.isArray(item.설비목록)) return item.설비목록.includes(selectedCategory);
         return (item.표준설비명 || item.적용설비) === selectedCategory;
       });
       setDetailItems(filtered);
@@ -663,12 +665,7 @@ function App() {
         return (
           <MainPage
             onSheetClick={(sheetName) => {
-              setSelectedSheet(sheetName);
-              // ✨ [로직 추가] 선택한 공정(시트)에 해당하는 설비들만 중복 없이 추출
-              const sheetItems = inventoryData.filter(item => item.원본시트 === sheetName);
-              const uniqueFacilities = [...new Set(sheetItems.map(item => item.적용설비))];
-              setFacilities(uniqueFacilities); 
-              setPage('facility'); 
+              handleSheetClick(sheetName);
             }}
             onSummaryClick={loadSummary}
             alerts={alerts}
@@ -678,12 +675,14 @@ function App() {
             onSearchResultClick={(item) => {
               setHighlightId(item.id);
               // 검색 결과 클릭 시 해당 아이템의 상세 정보로 바로 이동하는 로직
+              // 다중 호기 결합 항목이면 표준설비명(결합 표기) 기준으로, 아니면 적용설비 기준으로 필터링
+              const targetName = item.표준설비명 || item.적용설비;
               const filtered = inventoryData.filter(d => 
-                d.원본시트 === item.원본시트 && d.적용설비 === item.적용설비
+                d.원본시트 === item.원본시트 && (item.원본시트 === '공통' ? d.적용설비 === item.적용설비 : (d.표준설비명 || d.적용설비) === targetName)
               );
               setDetailItems(filtered);
               setSelectedSheet(item.원본시트);
-              setSelectedCategory(item.적용설비);
+              setSelectedCategory(item.원본시트 === '공통' ? item.적용설비 : targetName);
               setPage('detail');
               setSearchResults([]);
               setIsSearching(false);
