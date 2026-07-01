@@ -451,17 +451,8 @@ function App() {
     console.log(`   "${sheetName}" 필터링 결과: ${sheetItems.length}건`, sheetItems);
     
     // 해당 시트 내의 설비 추출 — 공통 탭은 적용설비 그대로, 나머지는 표준설비명 기준
-    // 다중 호기 결합 항목("충전기#1,2,3,4 (1공장)")은 개별 호기 카드로 펼쳐서 노출
     const facilityKey = sheetName === '공통' ? '적용설비' : '표준설비명';
-    const facilitySet = new Set();
-    sheetItems.forEach(item => {
-      if (item.isMultiUnit && Array.isArray(item.설비목록) && item.설비목록.length > 0) {
-        item.설비목록.forEach(unit => facilitySet.add(unit));
-      } else {
-        facilitySet.add(item[facilityKey] || item.적용설비);
-      }
-    });
-    const uniqueFacilities = [...facilitySet];
+    const uniqueFacilities = [...new Set(sheetItems.map(item => item[facilityKey] || item.적용설비))];
     console.log(`   추출된 설비: ${uniqueFacilities.length}개`, uniqueFacilities);
     
     setFacilities(uniqueFacilities);
@@ -471,11 +462,9 @@ function App() {
   // 2. 설비 페이지에서 특정 설비 클릭 시 실행
   const handleFacilityClick = (facilityName) => {
     // 공통 탭은 적용설비 기준, 나머지는 표준설비명 기준으로 필터
-    // 다중 호기 결합 항목("충전기#1,2,3,4")은 설비목록에 해당 호기가 포함되면 이 설비의 목록에도 노출
     const filteredItems = inventoryData.filter(item => {
       if (item.원본시트 !== selectedSheet) return false;
       if (selectedSheet === '공통') return item.적용설비 === facilityName;
-      if (item.isMultiUnit && Array.isArray(item.설비목록)) return item.설비목록.includes(facilityName);
       return (item.표준설비명 || item.적용설비) === facilityName;
     });
     
@@ -624,7 +613,6 @@ function App() {
           showToast={showToast}
           isCommonSheet={selectedSheet === '공통'}
           inventoryData={inventoryData}
-          facilityContext={selectedSheet === '공통' ? null : selectedCategory}
         />
       );
 
@@ -662,7 +650,14 @@ function App() {
     default: // 1단계: 메인화면 (공정 선택)
         return (
           <MainPage
-            onSheetClick={handleSheetClick}
+            onSheetClick={(sheetName) => {
+              setSelectedSheet(sheetName);
+              // ✨ [로직 추가] 선택한 공정(시트)에 해당하는 설비들만 중복 없이 추출
+              const sheetItems = inventoryData.filter(item => item.원본시트 === sheetName);
+              const uniqueFacilities = [...new Set(sheetItems.map(item => item.적용설비))];
+              setFacilities(uniqueFacilities); 
+              setPage('facility'); 
+            }}
             onSummaryClick={loadSummary}
             alerts={alerts}
             onSearch={handleSearch}
@@ -943,19 +938,15 @@ function FacilityPage({ selectedSheet, facilities, onFacilityClick, onBack, inve
         {facilities && facilities.length > 0 ? (
           facilities.map((facility) => {
             // 해당 설비의 전체 부품 추출 (공통 탭은 적용설비, 나머지는 표준설비명 기준)
-            // 다중 호기 결합 항목은 설비목록에 이 호기가 포함되면 카드에도 노출
             const facilityItems = inventoryData.filter(item => {
               if (item.원본시트 !== selectedSheet) return false;
               if (selectedSheet === '공통') return item.적용설비 === facility;
-              if (item.isMultiUnit && Array.isArray(item.설비목록)) return item.설비목록.includes(facility);
               return (item.표준설비명 || item.적용설비) === facility;
             });
             // 재고 부족 항목 계산
             const lowStockCount = facilityItems.filter(item => 
               item.최소보유수량 > 0 && item.현재수량 <= item.최소보유수량
             ).length;
-            // 다중 호기 결합 부품이 포함되어 있는지 (배지 표시용)
-            const hasMultiUnitPart = facilityItems.some(item => item.isMultiUnit);
 
             return (
               <button
@@ -972,9 +963,6 @@ function FacilityPage({ selectedSheet, facilities, onFacilityClick, onBack, inve
                   <span className="category-count">{facilityItems.length}개 품목</span>
                   {facility.endsWith('(공통)') && (
                     <span style={{ fontSize: '0.72rem', color: '#6366f1', fontWeight: 700, background: '#eef2ff', borderRadius: '6px', padding: '1px 7px', marginLeft: '4px' }}>공통</span>
-                  )}
-                  {hasMultiUnitPart && (
-                    <span style={{ fontSize: '0.72rem', color: '#d97706', fontWeight: 700, background: '#fffbeb', borderRadius: '6px', padding: '1px 7px', marginLeft: '4px' }}>호기 공용부품</span>
                   )}
                   {lowStockCount > 0 && (
                     <span className="low-stock-badge">⚠️ {lowStockCount}</span>
@@ -1005,7 +993,7 @@ function FacilityPage({ selectedSheet, facilities, onFacilityClick, onBack, inve
 // ============================================================
 // DetailPage (카테고리 클릭 후 리스트 + ✨ 수동 수정 UI)
 // ============================================================
-function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlightId, showToast, isCommonSheet, hideHeader, inventoryData, facilityContext }) { 
+function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlightId, showToast, isCommonSheet, hideHeader, inventoryData }) { 
   const [editingId, setEditingId] = useState(null);
   const [editValue, setEditValue] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
@@ -1014,9 +1002,6 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
   const [selectedFacility, setSelectedFacility] = useState('');
   const [facilitySearch, setFacilitySearch] = useState('');
   const [showFacilityDropdown, setShowFacilityDropdown] = useState(false);
-  // 다중 호기 결합 부품 출고 시 호기 선택 팝업 (공통부품 팝업과 별도)
-  const [unitPopup, setUnitPopup] = useState(null); // { item, newQty, oldQty }
-  const [selectedUnit, setSelectedUnit] = useState('');
 
   // 드롭다운 외부 클릭 시 닫기
   useEffect(() => {
@@ -1046,10 +1031,9 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
   };
 
   const handleSave = async (item) => {
-    const isOutgoing = editValue < item.현재수량;
-
     // 방안C: 공통부품 출고(수량 감소)인 경우 설비 선택 팝업 먼저 띄우기
     const isCommonPart = isCommonSheet || item.isCommonPart || String(item.적용설비 || '').includes('공통');
+    const isOutgoing = editValue < item.현재수량;
     if (isCommonPart && isOutgoing) {
       setCommonPopup({ item, newQty: editValue, oldQty: item.현재수량 });
       setSelectedFacility('');
@@ -1057,23 +1041,10 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
       setShowFacilityDropdown(false);
       return;
     }
-
-    // 다중 호기 결합 부품 출고인 경우 호기 선택 팝업(별도) 먼저 띄우기
-    // 단, facilityContext(특정 호기 페이지 안)에 있으면 이미 호기가 정해졌으므로 자동 진행
-    if (item.isMultiUnit && isOutgoing) {
-      if (facilityContext && Array.isArray(item.설비목록) && item.설비목록.includes(facilityContext)) {
-        await doSave(item, editValue, item.현재수량, null, facilityContext);
-        return;
-      }
-      setUnitPopup({ item, newQty: editValue, oldQty: item.현재수량 });
-      setSelectedUnit('');
-      return;
-    }
-
-    await doSave(item, editValue, item.현재수량, null, null);
+    await doSave(item, editValue, item.현재수량, null);
   };
 
-  const doSave = async (item, newQty, oldQty, facilityName, unitName) => {
+  const doSave = async (item, newQty, oldQty, facilityName) => {
     try {
       setIsSaving(true);
       const isCommonPart = isCommonSheet || item.isCommonPart || String(item.적용설비 || '').includes('공통');
@@ -1090,18 +1061,6 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
           user: userName,
           실제사용설비: facilityName,
         });
-      } else if (item.isMultiUnit && unitName) {
-        // 다중 호기 결합 부품 출고 — manual-update에 실제사용설비(호기) 포함 전송
-        await axios.post(`${BASE_URL}/inventory/manual-update`, {
-          id: item.id,
-          모델명: item.모델명,
-          원본시트: item.원본시트,
-          적용설비: item.적용설비,
-          현재수량: newQty,
-          action: newQty < oldQty ? '출고' : newQty > oldQty ? '입고' : '수량변경',
-          user: userName,
-          실제사용설비: unitName,
-        });
       } else {
         await axios.post(`${BASE_URL}/inventory/manual-update`, {
           id: item.id,
@@ -1115,7 +1074,6 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
       }
       setEditingId(null);
       setCommonPopup(null);
-      setUnitPopup(null);
       showToast('수량이 저장되었습니다.');
       await onUpdate();
     } catch (err) {
@@ -1131,8 +1089,6 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
     setCommonPopup(null);
     setFacilitySearch('');
     setShowFacilityDropdown(false);
-    setUnitPopup(null);
-    setSelectedUnit('');
   };
 
   return (
@@ -1302,75 +1258,6 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
         </div>
       )}
 
-      {/* 다중 호기 결합 부품 출고 — 호기 선택 팝업 (공통부품 팝업과 별도) */}
-      {unitPopup && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.5)', zIndex: 9999,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
-        }}>
-          <div style={{
-            background: '#fff', borderRadius: '16px', padding: '24px 20px',
-            maxWidth: '360px', width: '100%', boxShadow: '0 8px 32px rgba(0,0,0,0.18)'
-          }}>
-            <div style={{ fontSize: '1rem', fontWeight: 800, color: '#1a1f2e', marginBottom: '6px' }}>
-              ⚙️ 사용 호기 선택
-            </div>
-            <div style={{ fontSize: '0.78rem', color: '#6b7280', marginBottom: '16px', lineHeight: 1.5 }}>
-              <strong style={{ color: '#d97706' }}>{unitPopup.item.모델명}</strong>은 여러 호기가 함께 쓰는 부품입니다.<br/>
-              실제로 사용할 호기를 선택해 주세요.
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '14px' }}>
-              {(unitPopup.item.설비목록 || []).map(unit => (
-                <button
-                  key={unit}
-                  onClick={() => setSelectedUnit(unit)}
-                  style={{
-                    textAlign: 'left', padding: '10px 12px', borderRadius: '8px',
-                    border: `1.5px solid ${selectedUnit === unit ? '#d97706' : '#e5e7eb'}`,
-                    background: selectedUnit === unit ? '#fffbeb' : '#fff',
-                    color: selectedUnit === unit ? '#92400e' : '#1a1f2e',
-                    fontWeight: selectedUnit === unit ? 700 : 500,
-                    fontSize: '0.86rem', cursor: 'pointer',
-                  }}
-                >
-                  {selectedUnit === unit ? '✓ ' : ''}{unit}
-                </button>
-              ))}
-            </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                onClick={() => {
-                  if (!selectedUnit) {
-                    showToast('사용할 호기를 선택해 주세요.', 'error');
-                    return;
-                  }
-                  doSave(unitPopup.item, unitPopup.newQty, unitPopup.oldQty, null, selectedUnit);
-                }}
-                disabled={!selectedUnit || isSaving}
-                style={{
-                  flex: 1, padding: '10px', borderRadius: '8px', border: 'none',
-                  background: selectedUnit ? '#d97706' : '#9ca3af',
-                  color: '#fff', fontWeight: 700, fontSize: '0.85rem', cursor: selectedUnit ? 'pointer' : 'not-allowed',
-                }}
-              >
-                {isSaving ? '저장 중...' : '✓ 출고 확인'}
-              </button>
-              <button
-                onClick={() => { setUnitPopup(null); setSelectedUnit(''); }}
-                disabled={isSaving}
-                style={{
-                  padding: '10px 16px', borderRadius: '8px', border: '1.5px solid #e5e7eb',
-                  background: '#f9fafb', color: '#6b7280', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer',
-                }}
-              >
-                취소
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {!hideHeader && (
       <div className="detail-header">
         <button className="back-btn" onClick={onBack}>
@@ -1415,11 +1302,6 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
     
     <span className="detail-model">{item.모델명}</span>
     {isLow && <span className="low-stock-badge-inline">⚠️ 재고부족</span>}
-    {item.isMultiUnit && (
-      <span style={{ fontSize: '0.68rem', color: '#d97706', fontWeight: 700, background: '#fffbeb', borderRadius: '6px', padding: '1px 7px', marginLeft: '4px' }}>
-        호기 공용
-      </span>
-    )}
   </div>
     {!isEditing && (
                   <span className={`detail-quantity ${isLow ? 'text-red' : ''}`}>
@@ -1923,11 +1805,9 @@ function FacilityDashboardPage({ facilityName, inventoryData, selectedSheet, onB
   const [loadingLogs, setLoadingLogs] = useState(true);
 
   // 해당 설비 재고 아이템
-  // 다중 호기 결합 항목("충전기#1,2,3,4")은 설비목록에 이 호기가 포함되면 이 대시보드에도 노출
   const facilityItems = inventoryData.filter(item => {
     if (item.원본시트 !== selectedSheet) return false;
     if (selectedSheet === '공통') return item.적용설비 === facilityName;
-    if (item.isMultiUnit && Array.isArray(item.설비목록)) return item.설비목록.includes(facilityName);
     return (item.표준설비명 || item.적용설비) === facilityName;
   });
 
@@ -2231,7 +2111,6 @@ function FacilityDashboardPage({ facilityName, inventoryData, selectedSheet, onB
                     isCommonSheet={selectedSheet === '공통'}
                     hideHeader={true}
                     inventoryData={inventoryData}
-                    facilityContext={facilityName}
                   />
                 )}
               </div>
