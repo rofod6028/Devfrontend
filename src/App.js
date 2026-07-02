@@ -651,12 +651,7 @@ function App() {
         return (
           <MainPage
             onSheetClick={(sheetName) => {
-              setSelectedSheet(sheetName);
-              // ✨ [로직 추가] 선택한 공정(시트)에 해당하는 설비들만 중복 없이 추출
-              const sheetItems = inventoryData.filter(item => item.원본시트 === sheetName);
-              const uniqueFacilities = [...new Set(sheetItems.map(item => item.적용설비))];
-              setFacilities(uniqueFacilities); 
-              setPage('facility'); 
+              handleSheetClick(sheetName);
             }}
             onSummaryClick={loadSummary}
             alerts={alerts}
@@ -666,12 +661,15 @@ function App() {
             onSearchResultClick={(item) => {
               setHighlightId(item.id);
               // 검색 결과 클릭 시 해당 아이템의 상세 정보로 바로 이동하는 로직
-              const filtered = inventoryData.filter(d => 
-                d.원본시트 === item.원본시트 && d.적용설비 === item.적용설비
+              // 공통 시트는 적용설비 그대로, 나머지는 표준설비명 기준(카드/필터와 동일 기준)
+              const targetKey = item.원본시트 === '공통' ? '적용설비' : (item.표준설비명 ? '표준설비명' : '적용설비');
+              const targetValue = item[targetKey];
+              const filtered = inventoryData.filter(d =>
+                d.원본시트 === item.원본시트 && (d[targetKey] || d.적용설비) === targetValue
               );
               setDetailItems(filtered);
               setSelectedSheet(item.원본시트);
-              setSelectedCategory(item.적용설비);
+              setSelectedCategory(targetValue);
               setPage('detail');
               setSearchResults([]);
               setIsSearching(false);
