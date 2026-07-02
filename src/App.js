@@ -1302,6 +1302,14 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
     
     <span className="detail-model">{item.모델명}</span>
     {isLow && <span className="low-stock-badge-inline">⚠️ 재고부족</span>}
+    {item.재고그룹ID && (
+      <span
+        title="이 부품은 다른 호기와 재고를 공유합니다. 어느 한쪽에서 출고하면 양쪽 수량이 함께 줄어듭니다."
+        style={{ fontSize: '0.72rem', color: '#7c3aed', fontWeight: 700, background: '#f3e8ff', borderRadius: '6px', padding: '1px 7px', marginLeft: '4px' }}
+      >
+        🔗 재고 공유
+      </span>
+    )}
   </div>
     {!isEditing && (
                   <span className={`detail-quantity ${isLow ? 'text-red' : ''}`}>
@@ -1315,6 +1323,19 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
                   <span className="detail-info-label">적용설비</span>
                   <span className="detail-info-value">{item.적용설비}</span>
                 </div>
+                {item.재고그룹ID && (() => {
+                  const sharedWith = (inventoryData || [])
+                    .filter(d => d.재고그룹ID === item.재고그룹ID && d.id !== item.id)
+                    .map(d => d.표준설비명 || d.적용설비);
+                  return sharedWith.length > 0 ? (
+                    <div className="detail-info-row" style={{ background: '#faf5ff', borderRadius: '6px', padding: '4px 6px' }}>
+                      <span className="detail-info-label" style={{ color: '#7c3aed' }}>🔗 재고 공유 설비</span>
+                      <span className="detail-info-value" style={{ color: '#7c3aed', fontWeight: 600 }}>
+                        {sharedWith.join(', ')}
+                      </span>
+                    </div>
+                  ) : null;
+                })()}
                 <div className="detail-info-row">
                   <span className="detail-info-label">최소보유수량</span>
                   <span className="detail-info-value">{item.최소보유수량} 개</span>
