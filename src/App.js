@@ -1274,10 +1274,6 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
 
               <div className="detail-card-body">
                 <div className="detail-info-row">
-                  <span className="detail-info-label">적용설비</span>
-                  <span className="detail-info-value">{item.적용설비}</span>
-                </div>
-                <div className="detail-info-row">
                   <span className="detail-info-label">최소보유수량</span>
                   <span className="detail-info-value">{item.최소보유수량} 개</span>
                 </div>
