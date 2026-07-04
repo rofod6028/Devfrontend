@@ -373,7 +373,7 @@ function App() {
   const [isSearching, setIsSearching] = useState(false);
   const [userName, setUserName] = useState('');
   const [inventoryData, setInventoryData] = useState([]);
-  const [facilityMasterList, setFacilityMasterList] = useState([]); // [{설비명, 원본시트, 소속그룹}]
+  const [facilityLists, setFacilityLists] = useState({ 충전: [], 타정: [], all: [] }); // { 충전:[...], 타정:[...], all:[...] }
   const [selectedSheet, setSelectedSheet] = useState(null);
   const [facilities, setFacilities] = useState([]);
   const [toasts, setToasts] = useState([]);
@@ -390,13 +390,13 @@ function App() {
   };
 
   // ============================================================
-  // 알림 항목 → 해당 부품으로 바로 이동 (스페어파트 전체 목록에서 하이라이트)
+  // 알림 항목 → 해당 부품으로 바로 이동 (공통 시트 전체 목록에서 하이라이트)
   // ============================================================
   const navigateToItem = (item) => {
     setHighlightId(item.id);
     setDetailItems(inventoryData);
-    setSelectedSheet('스페어파트');
-    setSelectedCategory('스페어파트');
+    setSelectedSheet('공통');
+    setSelectedCategory('공통');
     setPage('detail');
   };
 
@@ -437,13 +437,10 @@ function App() {
   }, []);
 
   // 1. 메인에서 공정(시트) 클릭 시 실행
-  // 설비 카드 목록 = 설비마스터 시트에 등록된 해당 원본시트(충전/타정 등) 소속 개별 설비명
-  // ※ 스페어파트 시트의 적용설비 값은 더 이상 설비 카드 구성에 쓰이지 않는다 — 오직 설비마스터가 유일한 기준.
+  // 설비 카드 목록 = 백엔드가 충전/타정 시트(적용설비 목록 전용)에서 추출해 내려주는 facilityLists 기준
   const handleSheetClick = (sheetName) => {
     setSelectedSheet(sheetName);
-    const uniqueFacilities = [...new Set(
-      facilityMasterList.filter(u => u.원본시트 === sheetName).map(u => u.설비명)
-    )].sort();
+    const uniqueFacilities = [...new Set(facilityLists[sheetName] || [])].sort();
     setFacilities(uniqueFacilities);
     setPage('facility'); // 설비 선택 페이지로 이동
   };
@@ -455,11 +452,11 @@ function App() {
     setPage('facilityDashboard'); // 설비 대시보드로 이동
   };
 
-  // 3. 메인에서 "스페어파트" 카드 클릭 시 실행 → 전체 부품 리스트로 바로 이동
+  // 3. 메인에서 "공통" 카드 클릭 시 실행 → 전체 부품 리스트로 바로 이동
   const handleSparePartClick = () => {
-    setSelectedSheet('스페어파트');
+    setSelectedSheet('공통');
     setDetailItems(inventoryData);
-    setSelectedCategory('스페어파트');
+    setSelectedCategory('공통');
     setPage('detail');
   };
 
@@ -485,7 +482,7 @@ function App() {
     });
     
     setInventoryData(allData); // 전체 데이터 저장
-    setFacilityMasterList(res.data.facilityMaster || []); // 개별 호기 전체 목록 저장
+    setFacilityLists(res.data.facilityLists || { 충전: [], 타정: [], all: [] }); // 설비 목록(카드용) 저장
     
     // (기존 요약 기능 등을 위해 필요하다면 아래처럼 활용 가능)
     // setCategories(res.data.categories); 
@@ -574,10 +571,10 @@ function App() {
     const res = await axios.get(`${BASE_URL}/inventory`);
     const allData = res.data.data;
     setInventoryData(allData);
-    setFacilityMasterList(res.data.facilityMaster || []);
+    setFacilityLists(res.data.facilityLists || { 충전: [], 타정: [], all: [] });
     await loadAlerts();
     if (page === 'detail') {
-      // detail 페이지는 항상 스페어파트 전체 목록을 보여준다
+      // detail 페이지는 항상 공통 시트 전체 목록을 보여준다
       setDetailItems(allData);
     }
   }
@@ -586,19 +583,19 @@ function App() {
   if (loading) return <div className="loading-spinner"><div className="spinner"></div><p>로드 중...</p></div>;
 
   switch (page) {
-    case 'detail': // 부품 리스트 및 수정 (스페어파트 전체 목록)
+    case 'detail': // 부품 리스트 및 수정 (공통 시트 전체 목록)
       return (
         <DetailPage
           items={detailItems}
           categoryName={selectedCategory}
-          onBack={() => setPage(selectedSheet === '스페어파트' ? 'main' : 'facilityDashboard')}
+          onBack={() => setPage(selectedSheet === '공통' ? 'main' : 'facilityDashboard')}
           onUpdate={refreshData}
           userName={userName}
           highlightId={highlightId}
           showToast={showToast}
           isCommonSheet={true}
           inventoryData={inventoryData}
-          facilityMasterList={facilityMasterList}
+          facilityLists={facilityLists}
         />
       );
 
@@ -625,12 +622,12 @@ function App() {
       return <SummaryPage summary={summary} onBack={() => setPage('main')} onNavigateToItem={navigateToItem} />;
     
     case 'logs':
-      return <LogsPage onBack={() => setPage('main')} inventoryData={inventoryData} facilityMasterList={facilityMasterList} />;
+      return <LogsPage onBack={() => setPage('main')} inventoryData={inventoryData} facilityLists={facilityLists} />;
 
-    default: // 1단계: 메인화면 (스페어파트 + 공정별 설비 목록)
+    default: // 1단계: 메인화면 (공통 + 공정별 설비 목록)
         return (
           <MainPage
-            facilityMasterList={facilityMasterList}
+            facilityLists={facilityLists}
             onSheetClick={handleSheetClick}
             onSparePartClick={handleSparePartClick}
             onSummaryClick={loadSummary}
@@ -640,10 +637,10 @@ function App() {
             isSearching={isSearching}
             onSearchResultClick={(item) => {
               setHighlightId(item.id);
-              // 부품 검색 결과 클릭 시 스페어파트 전체 목록에서 해당 부품을 하이라이트
+              // 부품 검색 결과 클릭 시 공통 시트 전체 목록에서 해당 부품을 하이라이트
               setDetailItems(inventoryData);
-              setSelectedSheet('스페어파트');
-              setSelectedCategory('스페어파트');
+              setSelectedSheet('공통');
+              setSelectedCategory('공통');
               setPage('detail');
               setSearchResults([]);
               setIsSearching(false);
@@ -809,11 +806,11 @@ const processIcons = {
 };
 
 // 2. 컴포넌트 시작 (onSheetClick으로 변경)
-function MainPage({ onSheetClick, onSparePartClick, facilityMasterList, onSummaryClick, alerts, onSearch, searchResults, isSearching, onSearchResultClick }) {
+function MainPage({ onSheetClick, onSparePartClick, facilityLists, onSummaryClick, alerts, onSearch, searchResults, isSearching, onSearchResultClick }) {
   const [searchQuery, setSearchQuery] = useState('');
 
-  // 설비마스터에 등록된 원본시트(충전/타정 등)를 동적으로 추출 — 엑셀에 새 공정이 추가되면 자동으로 카드가 생긴다.
-  const processSheets = [...new Set((facilityMasterList || []).map(u => u.원본시트))].sort();
+  // 설비 목록 응답(충전/타정 등)에서 'all'을 제외한 공정 시트 이름을 동적으로 추출
+  const processSheets = Object.keys(facilityLists || {}).filter(k => k !== 'all').sort();
 
   const handleSearchChange = (e) => {
     const query = e.target.value;
@@ -825,7 +822,7 @@ function MainPage({ onSheetClick, onSparePartClick, facilityMasterList, onSummar
     <div className="main-page">
       <div className="page-header">
         <h1>스페어파츠 재고 관리</h1>
-        <p className="page-subtitle">설비를 선택해 이력을 확인하거나, 스페어파트에서 재고를 관리하세요</p>
+        <p className="page-subtitle">설비를 선택해 이력을 확인하거나, 공통 탭에서 재고를 관리하세요</p>
       </div>
 
       {/* ✨ 검색 바 (기존 유지) */}
@@ -870,18 +867,18 @@ function MainPage({ onSheetClick, onSparePartClick, facilityMasterList, onSummar
         </div>
       )}
 
-      {/* ✨ 스페어파트 (전체 재고 관리) */}
+      {/* ✨ 공통 (전체 재고 관리) */}
       <div className="category-grid">
         <button className="category-card" onClick={onSparePartClick} style={{ borderColor: '#2563eb' }}>
           <div className="category-icon-wrap">📦</div>
-          <div className="category-label">스페어파트</div>
+          <div className="category-label">공통</div>
           <div className="category-meta">
             <span className="category-count">전체 부품 재고 관리</span>
           </div>
         </button>
       </div>
 
-      {/* ✨ 설비 공정 버튼 그리드 — 설비마스터 기반 동적 목록 */}
+      {/* ✨ 설비 공정 버튼 그리드 — 설비 목록(충전/타정) 기반 동적 목록 */}
       <div className="category-grid" style={{ marginTop: '10px' }}>
         {processSheets.map((sheet) => (
           <button
@@ -941,7 +938,7 @@ function FacilityPage({ selectedSheet, facilities, onFacilityClick, onBack }) {
           ))
         ) : (
           <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '20px', color: '#666' }}>
-            <p>⚠️ 설비마스터에 등록된 설비가 없습니다</p>
+            <p>⚠️ 등록된 설비가 없습니다</p>
           </div>
         )}
       </div>
@@ -951,7 +948,7 @@ function FacilityPage({ selectedSheet, facilities, onFacilityClick, onBack }) {
 // ============================================================
 // DetailPage (카테고리 클릭 후 리스트 + ✨ 수동 수정 UI)
 // ============================================================
-function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlightId, showToast, isCommonSheet, hideHeader, inventoryData, facilityMasterList }) { 
+function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlightId, showToast, isCommonSheet, hideHeader, inventoryData, facilityLists }) { 
   const [editingId, setEditingId] = useState(null);
   const [editValue, setEditValue] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
@@ -1074,7 +1071,7 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
               const facilityList = (
                 Array.isArray(commonPopup.item.후보설비목록) && commonPopup.item.후보설비목록.length > 0
                   ? commonPopup.item.후보설비목록
-                  : facilityMasterList.map(u => u.설비명)
+                  : (facilityLists?.all || [])
               ).slice().sort();
               const filtered = facilityList.filter(f =>
                 f.toLowerCase().includes(facilitySearch.toLowerCase())
@@ -1173,7 +1170,7 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
               const facilityList2 = (
                 Array.isArray(commonPopup.item.후보설비목록) && commonPopup.item.후보설비목록.length > 0
                   ? commonPopup.item.후보설비목록
-                  : facilityMasterList.map(u => u.설비명)
+                  : (facilityLists?.all || [])
               );
               const isValid = facilityList2.includes(selectedFacility.trim());
               return (
@@ -1454,7 +1451,7 @@ function SummaryPage({ summary, onBack, onNavigateToItem }) {
 // ============================================================
 // ✨ LogsPage (재고 변경 이력)
 // ============================================================
-function LogsPage({ onBack, inventoryData, facilityMasterList }) {
+function LogsPage({ onBack, inventoryData, facilityLists }) {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -1464,9 +1461,9 @@ function LogsPage({ onBack, inventoryData, facilityMasterList }) {
   const [filterPartType, setFilterPartType] = useState('');
   const LIMIT = 50;
 
-  // 설비 필터 옵션 = 설비마스터의 실제 개별 설비 목록 (로그에는 실제사용설비명이 기록되므로)
+  // 설비 필터 옵션 = 전체 설비 목록(충전+타정, 로그에는 실제사용설비명이 기록되므로)
   const facilityOptions = [...new Set(
-    (facilityMasterList || []).map(u => u.설비명).filter(Boolean)
+    (facilityLists?.all || []).filter(Boolean)
   )].sort();
   const partTypeOptions = [...new Set(
     (inventoryData || []).map(i => i.부품종류).filter(Boolean)
