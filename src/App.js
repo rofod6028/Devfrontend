@@ -4,6 +4,18 @@ import './App.css';
 
 const BASE_URL = 'https://devbackend-i7t6.onrender.com/api';
 
+// 특정 설비(개별 호기)에서 사용 가능한 부품인지 판정
+// - 이 설비 전용으로 확정된 부품(표준설비명이 정확히 일치)
+// - 여러 설비가 공용으로 쓰는 부품인데(isCommonPart) 이 설비가 후보설비목록에 포함된 경우
+function isItemUsableAtFacility(item, facilityName) {
+  if (!item || !facilityName) return false;
+  if (item.표준설비명 === facilityName) return true;
+  if (item.isCommonPart && Array.isArray(item.후보설비목록)) {
+    return item.후보설비목록.includes(facilityName);
+  }
+  return false;
+}
+
 // ✨ 1. 사번 명단 정의 (App 함수 밖 상단에 배치)
 const USER_MAP = {
   "225298": "김양섭",
@@ -373,6 +385,7 @@ function App() {
   const [isSearching, setIsSearching] = useState(false);
   const [userName, setUserName] = useState('');
   const [inventoryData, setInventoryData] = useState([]);
+  const [facilityMasterList, setFacilityMasterList] = useState([]); // [{설비명, 원본시트, 소속그룹}]
   const [selectedSheet, setSelectedSheet] = useState(null);
   const [facilities, setFacilities] = useState([]);
   const [toasts, setToasts] = useState([]);
@@ -393,12 +406,10 @@ function App() {
   // ============================================================
   const navigateToItem = (item) => {
     setHighlightId(item.id);
-    const filtered = inventoryData.filter(d =>
-      d.원본시트 === item.원본시트 && d.적용설비 === item.적용설비
-    );
+    const filtered = inventoryData.filter(d => d.표준설비명 === item.표준설비명);
     setDetailItems(filtered);
     setSelectedSheet(item.원본시트);
-    setSelectedCategory(item.적용설비);
+    setSelectedCategory(item.표준설비명);
     setPage('detail');
   };
 
@@ -440,33 +451,27 @@ function App() {
 
   // 1. 메인에서 공정(시트) 클릭 시 실행
   const handleSheetClick = (sheetName) => {
-    console.log(`🔍 시트 클릭: ${sheetName}`);
-    console.log(`   inventoryData 크기: ${inventoryData.length}건`);
-    console.log(`   전체 데이터:`, inventoryData);
-    
     setSelectedSheet(sheetName);
-    
-    // 전체 데이터에서 해당 시트 데이터만 필터링
-    const sheetItems = inventoryData.filter(item => item.원본시트 === sheetName);
-    console.log(`   "${sheetName}" 필터링 결과: ${sheetItems.length}건`, sheetItems);
-    
-    // 해당 시트 내의 설비 추출 — 공통 탭은 적용설비 그대로, 나머지는 표준설비명 기준
-    const facilityKey = sheetName === '공통' ? '적용설비' : '표준설비명';
-    const uniqueFacilities = [...new Set(sheetItems.map(item => item[facilityKey] || item.적용설비))];
-    console.log(`   추출된 설비: ${uniqueFacilities.length}개`, uniqueFacilities);
-    
+
+    // 설비 카드 목록 = 설비마스터의 개별 호기(해당 원본시트) ∪ 직접 등록된 개별 설비(그룹아님)
+    // ※ 그룹 태그(예: "마블충전기 (1공장) 관련") 자체는 카드로 노출하지 않는다 — 실제 개별 호기만 카드로 노출
+    const masterUnits = facilityMasterList
+      .filter(u => u.원본시트 === sheetName)
+      .map(u => u.설비명);
+    const directUnits = inventoryData
+      .filter(item => item.원본시트 === sheetName && !item.isCommonPart)
+      .map(item => item.표준설비명);
+
+    const uniqueFacilities = [...new Set([...masterUnits, ...directUnits])].sort();
+
     setFacilities(uniqueFacilities);
     setPage('facility'); // 설비 선택 페이지로 이동
   };
 
   // 2. 설비 페이지에서 특정 설비 클릭 시 실행
   const handleFacilityClick = (facilityName) => {
-    // 공통 탭은 적용설비 기준, 나머지는 표준설비명 기준으로 필터
-    const filteredItems = inventoryData.filter(item => {
-      if (item.원본시트 !== selectedSheet) return false;
-      if (selectedSheet === '공통') return item.적용설비 === facilityName;
-      return (item.표준설비명 || item.적용설비) === facilityName;
-    });
+    // 이 설비에서 사용 가능한 모든 부품(전용 + 공용 후보 포함)
+    const filteredItems = inventoryData.filter(item => isItemUsableAtFacility(item, facilityName));
     
     setDetailItems(filteredItems); 
     setSelectedCategory(facilityName); // 상세페이지 제목으로 표시
@@ -496,6 +501,7 @@ function App() {
     });
     
     setInventoryData(allData); // 전체 데이터 저장
+    setFacilityMasterList(res.data.facilityMaster || []); // 개별 호기 전체 목록 저장
     
     // (기존 요약 기능 등을 위해 필요하다면 아래처럼 활용 가능)
     // setCategories(res.data.categories); 
@@ -584,15 +590,11 @@ function App() {
     const res = await axios.get(`${BASE_URL}/inventory`);
     const allData = res.data.data;
     setInventoryData(allData);
+    setFacilityMasterList(res.data.facilityMaster || []);
     await loadAlerts();
-    if (page === 'detail' && selectedSheet && selectedCategory) {
+    if (page === 'detail' && selectedCategory) {
       // handleFacilityClick과 동일한 필터 로직 사용
-      // 공통 탭은 적용설비 기준, 나머지는 표준설비명 기준
-      const filtered = allData.filter(item => {
-        if (item.원본시트 !== selectedSheet) return false;
-        if (selectedSheet === '공통') return item.적용설비 === selectedCategory;
-        return (item.표준설비명 || item.적용설비) === selectedCategory;
-      });
+      const filtered = allData.filter(item => isItemUsableAtFacility(item, selectedCategory));
       setDetailItems(filtered);
     }
   }
@@ -650,6 +652,7 @@ function App() {
     default: // 1단계: 메인화면 (공정 선택)
         return (
           <MainPage
+            hasUnclassified={inventoryData.some(item => item.원본시트 === '미분류')}
             onSheetClick={(sheetName) => {
               handleSheetClick(sheetName);
             }}
@@ -660,16 +663,13 @@ function App() {
             isSearching={isSearching}
             onSearchResultClick={(item) => {
               setHighlightId(item.id);
-              // 검색 결과 클릭 시 해당 아이템의 상세 정보로 바로 이동하는 로직
-              // 공통 시트는 적용설비 그대로, 나머지는 표준설비명 기준(카드/필터와 동일 기준)
-              const targetKey = item.원본시트 === '공통' ? '적용설비' : (item.표준설비명 ? '표준설비명' : '적용설비');
-              const targetValue = item[targetKey];
-              const filtered = inventoryData.filter(d =>
-                d.원본시트 === item.원본시트 && (d[targetKey] || d.적용설비) === targetValue
-              );
+              // 검색 결과 클릭 시 해당 아이템과 같은 표준설비명(개별설비 또는 공용그룹)을 가진
+              // 항목들을 모아서 상세 화면으로 이동 — 표준설비명은 개별/그룹 어느 경우든
+              // 일관된 식별자이므로 이 기준 하나로 충분하다.
+              const filtered = inventoryData.filter(d => d.표준설비명 === item.표준설비명);
               setDetailItems(filtered);
               setSelectedSheet(item.원본시트);
-              setSelectedCategory(targetValue);
+              setSelectedCategory(item.표준설비명);
               setPage('detail');
               setSearchResults([]);
               setIsSearching(false);
@@ -823,17 +823,26 @@ const processIcons = {
       <path d="M36 36 L46 46" stroke="#475569" strokeWidth="3" strokeLinecap="round"/>
       <circle cx="34" cy="34" r="3" fill="none" stroke="#475569" strokeWidth="2"/>
     </svg>
+  ),
+  '미분류': (
+    <svg viewBox="0 0 64 64" width="52" height="52" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="64" height="64" rx="16" fill="#fffbeb"/>
+      <circle cx="32" cy="26" r="14" fill="none" stroke="#d97706" strokeWidth="2.5"/>
+      <text x="32" y="32" textAnchor="middle" fontSize="16" fontWeight="700" fill="#d97706">?</text>
+      <rect x="18" y="46" width="28" height="4" rx="2" fill="#d97706" opacity="0.4"/>
+    </svg>
   )
 };
 
 // 2. 컴포넌트 시작 (onSheetClick으로 변경)
-function MainPage({ onSheetClick, onSummaryClick, alerts, onSearch, searchResults, isSearching, onSearchResultClick }) {
+function MainPage({ onSheetClick, onSummaryClick, alerts, onSearch, searchResults, isSearching, onSearchResultClick, hasUnclassified }) {
   const [searchQuery, setSearchQuery] = useState('');
 
   const processSheets = [
     { name: '충전', desc: '립스틱 / 틴트' },
     { name: '타정', desc: '파우더 / 팩트' },
-    { name: '공통', desc: '공용 및 기타' }
+    { name: '공통', desc: '공용 및 기타' },
+    ...(hasUnclassified ? [{ name: '미분류', desc: '⚠️ 설비마스터 등록 필요' }] : [])
   ];
 
   const handleSearchChange = (e) => {
@@ -935,12 +944,8 @@ function FacilityPage({ selectedSheet, facilities, onFacilityClick, onBack, inve
       <div className="category-grid" style={{ marginTop: '20px' }}>
         {facilities && facilities.length > 0 ? (
           facilities.map((facility) => {
-            // 해당 설비의 전체 부품 추출 (공통 탭은 적용설비, 나머지는 표준설비명 기준)
-            const facilityItems = inventoryData.filter(item => {
-              if (item.원본시트 !== selectedSheet) return false;
-              if (selectedSheet === '공통') return item.적용설비 === facility;
-              return (item.표준설비명 || item.적용설비) === facility;
-            });
+            // 해당 설비에서 사용 가능한 부품(전용 + 공용 후보 포함) 추출
+            const facilityItems = inventoryData.filter(item => isItemUsableAtFacility(item, facility));
             // 재고 부족 항목 계산
             const lowStockCount = facilityItems.filter(item => 
               item.최소보유수량 > 0 && item.현재수량 <= item.최소보유수량
@@ -959,9 +964,6 @@ function FacilityPage({ selectedSheet, facilities, onFacilityClick, onBack, inve
                 <div className="category-label" style={{ fontSize: '1.1rem' }}>{facility}</div>
                 <div className="category-meta">
                   <span className="category-count">{facilityItems.length}개 품목</span>
-                  {facility.endsWith('(공통)') && (
-                    <span style={{ fontSize: '0.72rem', color: '#6366f1', fontWeight: 700, background: '#eef2ff', borderRadius: '6px', padding: '1px 7px', marginLeft: '4px' }}>공통</span>
-                  )}
                   {lowStockCount > 0 && (
                     <span className="low-stock-badge">⚠️ {lowStockCount}</span>
                   )}
@@ -1111,13 +1113,11 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
             </div>
             {/* 검색창 + 드롭다운 방식 */}
             {(() => {
-              const facilitySet = new Set(
-                (inventoryData || [])
-                  .filter(d => d.원본시트 !== '공통')
-                  .map(d => String(d.표준설비명 || d.적용설비 || '').replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim())
-                  .filter(Boolean)
-              );
-              const facilityList = [...facilitySet].sort();
+              const facilityList = (
+                Array.isArray(commonPopup.item.후보설비목록) && commonPopup.item.후보설비목록.length > 0
+                  ? commonPopup.item.후보설비목록
+                  : facilityMasterList.map(u => u.설비명)
+              ).slice().sort();
               const filtered = facilityList.filter(f =>
                 f.toLowerCase().includes(facilitySearch.toLowerCase())
               );
@@ -1212,13 +1212,11 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
               </div>
             )}
             {(() => {
-              const facilitySet2 = new Set(
-                (inventoryData || [])
-                  .filter(d => d.원본시트 !== '공통')
-                  .map(d => String(d.표준설비명 || d.적용설비 || '').replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim())
-                  .filter(Boolean)
+              const facilityList2 = (
+                Array.isArray(commonPopup.item.후보설비목록) && commonPopup.item.후보설비목록.length > 0
+                  ? commonPopup.item.후보설비목록
+                  : facilityMasterList.map(u => u.설비명)
               );
-              const facilityList2 = [...facilitySet2];
               const isValid = facilityList2.includes(selectedFacility.trim());
               return (
             <div style={{ display: 'flex', gap: '8px' }}>
@@ -1300,12 +1298,12 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
     
     <span className="detail-model">{item.모델명}</span>
     {isLow && <span className="low-stock-badge-inline">⚠️ 재고부족</span>}
-    {item.재고그룹ID && (
+    {item.isCommonPart && (
       <span
-        title="이 부품은 다른 호기와 재고를 공유합니다. 어느 한쪽에서 출고하면 양쪽 수량이 함께 줄어듭니다."
+        title="이 부품은 여러 설비가 공용으로 사용합니다. 출고 시 실제 사용 설비를 확인합니다."
         style={{ fontSize: '0.72rem', color: '#7c3aed', fontWeight: 700, background: '#f3e8ff', borderRadius: '6px', padding: '1px 7px', marginLeft: '4px' }}
       >
-        🔗 재고 공유
+        🔗 공용 부품
       </span>
     )}
   </div>
@@ -1321,19 +1319,14 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
                   <span className="detail-info-label">적용설비</span>
                   <span className="detail-info-value">{item.적용설비}</span>
                 </div>
-                {item.재고그룹ID && (() => {
-                  const sharedWith = (inventoryData || [])
-                    .filter(d => d.재고그룹ID === item.재고그룹ID && d.id !== item.id)
-                    .map(d => d.표준설비명 || d.적용설비);
-                  return sharedWith.length > 0 ? (
-                    <div className="detail-info-row" style={{ background: '#faf5ff', borderRadius: '6px', padding: '4px 6px' }}>
-                      <span className="detail-info-label" style={{ color: '#7c3aed' }}>🔗 재고 공유 설비</span>
-                      <span className="detail-info-value" style={{ color: '#7c3aed', fontWeight: 600 }}>
-                        {sharedWith.join(', ')}
-                      </span>
-                    </div>
-                  ) : null;
-                })()}
+                {item.isCommonPart && Array.isArray(item.후보설비목록) && item.후보설비목록.length > 0 && (
+                  <div className="detail-info-row" style={{ background: '#faf5ff', borderRadius: '6px', padding: '4px 6px' }}>
+                    <span className="detail-info-label" style={{ color: '#7c3aed' }}>🔗 사용 가능 설비</span>
+                    <span className="detail-info-value" style={{ color: '#7c3aed', fontWeight: 600 }}>
+                      {item.후보설비목록.join(', ')}
+                    </span>
+                  </div>
+                )}
                 <div className="detail-info-row">
                   <span className="detail-info-label">최소보유수량</span>
                   <span className="detail-info-value">{item.최소보유수량} 개</span>
@@ -1823,19 +1816,19 @@ function FacilityDashboardPage({ facilityName, inventoryData, selectedSheet, onB
   const [facilityLogs, setFacilityLogs] = useState([]);
   const [loadingLogs, setLoadingLogs] = useState(true);
 
-  // 해당 설비 재고 아이템
-  const facilityItems = inventoryData.filter(item => {
-    if (item.원본시트 !== selectedSheet) return false;
-    if (selectedSheet === '공통') return item.적용설비 === facilityName;
-    return (item.표준설비명 || item.적용설비) === facilityName;
-  });
+  // 해당 설비에서 사용 가능한 재고 아이템(전용 + 공용 후보 포함)
+  const facilityItems = inventoryData.filter(item => isItemUsableAtFacility(item, facilityName));
+  const [partSearch, setPartSearch] = useState('');
+  const [searchHighlightId, setSearchHighlightId] = useState(null);
+  const partSearchResults = partSearch.trim()
+    ? facilityItems.filter(item => item.모델명.toLowerCase().includes(partSearch.trim().toLowerCase()))
+    : [];
 
   useEffect(() => {
     async function fetchLogs() {
       setLoadingLogs(true);
       try {
-        const isCommonSheet = selectedSheet === '공통';
-        const res = await axios.get(`${BASE_URL}/inventory/facility-logs?facility=${encodeURIComponent(facilityName)}&limit=500&isCommon=${isCommonSheet}`);
+        const res = await axios.get(`${BASE_URL}/inventory/facility-logs?facility=${encodeURIComponent(facilityName)}&limit=500`);
         setFacilityLogs(res.data.data || []);
       } catch (e) {
         console.error('설비이력 로드 실패:', e);
@@ -1975,6 +1968,75 @@ function FacilityDashboardPage({ facilityName, inventoryData, selectedSheet, onB
             <div style={{ fontSize: '0.7rem', color: '#6b7280', marginTop: '2px', fontWeight: 500 }}>{card.label}</div>
           </div>
         ))}
+      </div>
+
+      {/* 🔍 부품 빠른 검색 — 이 설비에서 쓸 수 있는 부품을 모델명으로 즉시 조회 */}
+      <div style={{ marginTop: '12px', position: 'relative' }}>
+        <div style={{ position: 'relative' }}>
+          <span style={{
+            position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)',
+            fontSize: '0.95rem', color: '#9ca3af', pointerEvents: 'none'
+          }}>🔍</span>
+          <input
+            type="text"
+            value={partSearch}
+            onChange={(e) => setPartSearch(e.target.value)}
+            placeholder="이 설비의 부품을 모델명으로 검색..."
+            style={{
+              width: '100%', padding: '10px 12px 10px 32px', borderRadius: '10px',
+              border: '1.5px solid #e2e6ea', fontSize: '0.85rem', boxSizing: 'border-box'
+            }}
+          />
+          {partSearch && (
+            <button
+              onClick={() => setPartSearch('')}
+              style={{
+                position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)',
+                border: 'none', background: 'none', color: '#9ca3af', fontSize: '0.9rem', cursor: 'pointer'
+              }}
+            >✕</button>
+          )}
+        </div>
+        {partSearch.trim() && (
+          <div style={{
+            marginTop: '6px', border: '1.5px solid #e2e6ea', borderRadius: '10px',
+            maxHeight: '260px', overflowY: 'auto', background: '#fff'
+          }}>
+            {partSearchResults.length === 0 ? (
+              <div style={{ padding: '14px', textAlign: 'center', color: '#9ca3af', fontSize: '0.82rem' }}>
+                일치하는 부품이 없습니다.
+              </div>
+            ) : (
+              partSearchResults.map(item => (
+                <div
+                  key={item.id}
+                  onClick={() => {
+                    setSearchHighlightId(item.id);
+                    setActiveTab('analysis');
+                    setPartSearch('');
+                  }}
+                  style={{
+                    padding: '10px 12px', borderBottom: '1px solid #f1f3f5', cursor: 'pointer',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1a1f2e' }}>{item.모델명}</div>
+                    <div style={{ fontSize: '0.72rem', color: '#9ca3af', marginTop: '2px' }}>
+                      {item.부품종류}{item.isCommonPart ? ` · 공용(${item.표준설비명})` : ''}
+                    </div>
+                  </div>
+                  <span style={{
+                    fontSize: '0.85rem', fontWeight: 800,
+                    color: (item.최소보유수량 > 0 && item.현재수량 <= item.최소보유수량) ? '#dc2626' : '#2563eb'
+                  }}>
+                    {item.현재수량}개
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        )}
       </div>
 
       {/* 탭 */}
@@ -2125,7 +2187,7 @@ function FacilityDashboardPage({ facilityName, inventoryData, selectedSheet, onB
                     onBack={() => {}}
                     onUpdate={onInventoryUpdate}
                     userName={userName}
-                    highlightId={null}
+                    highlightId={searchHighlightId}
                     showToast={showToast}
                     isCommonSheet={selectedSheet === '공통'}
                     hideHeader={true}
