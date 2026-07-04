@@ -1277,14 +1277,6 @@ function DetailPage({ items, categoryName, onBack, onUpdate, userName, highlight
                   <span className="detail-info-label">적용설비</span>
                   <span className="detail-info-value">{item.적용설비}</span>
                 </div>
-                {item.isCommonPart && Array.isArray(item.후보설비목록) && item.후보설비목록.length > 0 && (
-                  <div className="detail-info-row" style={{ background: '#faf5ff', borderRadius: '6px', padding: '4px 6px' }}>
-                    <span className="detail-info-label" style={{ color: '#7c3aed' }}>🔗 사용 가능 설비</span>
-                    <span className="detail-info-value" style={{ color: '#7c3aed', fontWeight: 600 }}>
-                      {item.후보설비목록.join(', ')}
-                    </span>
-                  </div>
-                )}
                 <div className="detail-info-row">
                   <span className="detail-info-label">최소보유수량</span>
                   <span className="detail-info-value">{item.최소보유수량} 개</span>
