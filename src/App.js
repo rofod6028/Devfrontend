@@ -599,12 +599,15 @@ function App() {
         />
       );
 
-    case 'facilityDashboard': // 설비 대시보드 (소모분석 + 이력 + 위험예측, 재고 조작 없음)
+    case 'facilityDashboard': // 설비 대시보드 (소모분석 + 이력 + 부품 검색/출고)
       return (
         <FacilityDashboardPage
           facilityName={dashboardFacility}
           inventoryData={inventoryData}
           onBack={() => setPage('facility')}
+          onUpdate={refreshData}
+          userName={userName}
+          showToast={showToast}
         />
       );
 
@@ -1766,10 +1769,64 @@ function AIChatBar({ onInventoryUpdate, showToast }) {
 // ============================================================
 // FacilityDashboardPage — 설비별 부품 사용 이력 차트 대시보드
 // ============================================================
-function FacilityDashboardPage({ facilityName, inventoryData, onBack }) {
-  const [activeTab, setActiveTab] = useState('analysis'); // 'analysis' | 'history' | 'risk'
+function FacilityDashboardPage({ facilityName, inventoryData, onBack, onUpdate, userName, showToast }) {
+  const [activeTab, setActiveTab] = useState('analysis'); // 'analysis' | 'history' | 'search'
   const [facilityLogs, setFacilityLogs] = useState([]);
   const [loadingLogs, setLoadingLogs] = useState(true);
+
+  // ── 부품 검색 (이 설비에서 쓸 공통부품을 찾아 바로 출고) ──
+  const [partSearchQuery, setPartSearchQuery] = useState('');
+  const [partSearchResults, setPartSearchResults] = useState([]);
+  const [isPartSearching, setIsPartSearching] = useState(false);
+  const [issuePopup, setIssuePopup] = useState(null); // { item, qty }
+  const [isIssuing, setIsIssuing] = useState(false);
+
+  async function handlePartSearch(query) {
+    setPartSearchQuery(query);
+    if (!query || query.trim().length < 1) {
+      setPartSearchResults([]);
+      setIsPartSearching(false);
+      return;
+    }
+    try {
+      setIsPartSearching(true);
+      const res = await axios.get(`${BASE_URL}/inventory/search?q=${encodeURIComponent(query)}`);
+      setPartSearchResults(res.data.data || []);
+    } catch (e) {
+      console.error('부품 검색 실패:', e);
+      setPartSearchResults([]);
+    }
+  }
+
+  async function handleIssueConfirm() {
+    if (!issuePopup) return;
+    const { item, qty } = issuePopup;
+    if (!qty || qty <= 0 || qty > item.현재수량) {
+      showToast && showToast(`출고 수량을 확인해 주세요 (현재고 ${item.현재수량}개)`, 'error');
+      return;
+    }
+    try {
+      setIsIssuing(true);
+      await axios.post(`${BASE_URL}/inventory/common-update`, {
+        id: item.id,
+        현재수량: item.현재수량 - qty,
+        action: '출고',
+        user: userName,
+        실제사용설비: facilityName
+      });
+      showToast && showToast(`${item.모델명} ${qty}개 출고 완료 (${facilityName})`, 'success');
+      setIssuePopup(null);
+      setPartSearchQuery('');
+      setPartSearchResults([]);
+      setIsPartSearching(false);
+      onUpdate && await onUpdate();
+    } catch (e) {
+      console.error('출고 실패:', e);
+      showToast && showToast(e.response?.data?.message || '출고 처리 중 오류가 발생했습니다.', 'error');
+    } finally {
+      setIsIssuing(false);
+    }
+  }
 
   useEffect(() => {
     async function fetchLogs() {
@@ -1873,26 +1930,6 @@ function FacilityDashboardPage({ facilityName, inventoryData, onBack }) {
   });
   const maxTrend = Math.max(...trendEntries.map(([, v]) => v.total), 1);
 
-  // 재고 부족 위험 부품 — 이 설비에서 실제로 사용 이력이 있는 부품만 대상
-  const riskItems = Object.values(allPartConsumption)
-    .map(cons => {
-      const item = inventoryData.find(d => d.모델명 === cons.model);
-      if (!item || !(item.최소보유수량 > 0)) return null;
-      const avgPerEvent = cons.total / cons.count;
-      const daysToEmpty = avgPerEvent > 0 ? Math.floor(item.현재수량 / avgPerEvent * 30) : null;
-      return {
-        ...item,
-        avgPerEvent: avgPerEvent.toFixed(1),
-        daysToEmpty,
-        riskLevel: item.현재수량 === 0 ? 'critical' : item.현재수량 <= item.최소보유수량 ? 'warning' : 'ok'
-      };
-    })
-    .filter(Boolean)
-    .sort((a, b) => ({ critical: 0, warning: 1, ok: 2 }[a.riskLevel] - { critical: 0, warning: 1, ok: 2 }[b.riskLevel]));
-
-  const riskColor = { critical: '#dc2626', warning: '#ea580c', ok: '#16a34a' };
-  const riskLabel = { critical: '🔴 재고소진', warning: '🟡 부족경고', ok: '🟢 정상' };
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
       {/* 헤더 */}
@@ -1910,11 +1947,10 @@ function FacilityDashboardPage({ facilityName, inventoryData, onBack }) {
       </div>
 
       {/* 요약 카드 */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', padding: '12px 0 4px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', padding: '12px 0 4px' }}>
         {[
           { label: '사용 부품 종류', value: Object.keys(allPartConsumption).length + '종', color: '#2563eb', bg: '#dbeafe' },
           { label: '1개월 출고', value: outLogs.length + '건', color: '#7c3aed', bg: '#ede9fe' },
-          { label: '부족 부품', value: riskItems.filter(i => i.riskLevel !== 'ok').length + '종', color: '#dc2626', bg: '#fee2e2' },
         ].map(card => (
           <div key={card.label} style={{ background: card.bg, borderRadius: '10px', padding: '10px 8px', textAlign: 'center' }}>
             <div style={{ fontSize: '1.2rem', fontWeight: 800, color: card.color }}>{card.value}</div>
@@ -1928,7 +1964,7 @@ function FacilityDashboardPage({ facilityName, inventoryData, onBack }) {
         {[
           { id: 'analysis', icon: '📊', label: '소모 분석' },
           { id: 'history', icon: '📋', label: '이력 목록' },
-          { id: 'risk', icon: '⚠️', label: '위험 예측' },
+          { id: 'search', icon: '🔍', label: '부품 검색' },
         ].map(tab => (
           <button
             key={tab.id}
@@ -2105,54 +2141,97 @@ function FacilityDashboardPage({ facilityName, inventoryData, onBack }) {
             </div>
           )}
 
-          {/* ── 탭3: 위험 예측 ── */}
-          {activeTab === 'risk' && (
+          {/* ── 탭3: 부품 검색 (이 설비에서 쓸 공통부품을 찾아 바로 출고) ── */}
+          {activeTab === 'search' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <div style={{ background: '#fffbeb', borderRadius: '10px', padding: '10px 13px', fontSize: '0.75rem', color: '#92400e', border: '1px solid #fde68a', lineHeight: 1.6 }}>
-                💡 최소보유수량이 설정된 부품 기준으로, 출고 이력을 바탕해 현재 재고의 위험도를 분석합니다.
+              <div style={{ background: '#eff6ff', borderRadius: '10px', padding: '10px 13px', fontSize: '0.75rem', color: '#1e40af', border: '1px solid #bfdbfe', lineHeight: 1.6 }}>
+                💡 모델명이나 부품종류(예: "공압", "센서")로 검색하면, 찾은 부품을 바로 <strong>{facilityName}</strong>에서 출고 처리할 수 있습니다.
               </div>
-              {riskItems.length === 0 ? (
-                <div style={{ textAlign: 'center', color: '#9ca3af', padding: '30px 0', fontSize: '0.85rem' }}>최소보유수량이 설정된 부품이 없습니다</div>
-              ) : (
-                riskItems.map(item => (
-                  <div key={item.id} style={{
-                    background: '#fff', borderRadius: '10px', padding: '12px 13px',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-                    borderLeft: `3px solid ${riskColor[item.riskLevel]}`,
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
-                          <span style={{ fontSize: '0.7rem', fontWeight: 700, color: riskColor[item.riskLevel] }}>
-                            {riskLabel[item.riskLevel]}
-                          </span>
+
+              <div className="search-input-wrap" style={{ position: 'relative' }}>
+                <svg className="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <input
+                  type="text"
+                  className="search-input"
+                  placeholder="모델명, 부품종류(예: 공압, 센서, 모터) 검색..."
+                  value={partSearchQuery}
+                  onChange={(e) => handlePartSearch(e.target.value)}
+                />
+                {partSearchQuery && (
+                  <button className="search-clear" onClick={() => { setPartSearchQuery(''); setPartSearchResults([]); setIsPartSearching(false); }}>✕</button>
+                )}
+              </div>
+
+              {isPartSearching && (
+                partSearchResults.length === 0 ? (
+                  <div style={{ textAlign: 'center', color: '#9ca3af', padding: '24px 0', fontSize: '0.82rem' }}>검색 결과가 없습니다</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {partSearchResults.map(item => (
+                      <div
+                        key={item.id}
+                        onClick={() => setIssuePopup({ item, qty: 1 })}
+                        style={{
+                          background: '#fff', borderRadius: '10px', padding: '10px 12px',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.06)', cursor: 'pointer',
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: '0.68rem', color: '#6b7280' }}>{item.적용설비} · {item.부품종류}</div>
+                          <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1a1f2e' }}>{item.모델명}</div>
                         </div>
-                        <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#1a1f2e' }}>{item.모델명}</div>
-                        <div style={{ fontSize: '0.68rem', color: '#6b7280', marginTop: '1px' }}>{item.부품종류}</div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: '0.95rem', fontWeight: 800, color: item.현재수량 <= item.최소보유수량 ? '#dc2626' : '#1a1f2e' }}>
+                            {item.현재수량}개
+                          </div>
+                          <div style={{ fontSize: '0.62rem', color: '#2563eb', fontWeight: 600 }}>탭하여 출고</div>
+                        </div>
                       </div>
-                      <div style={{ textAlign: 'right', minWidth: '70px' }}>
-                        <div style={{ fontSize: '1.1rem', fontWeight: 800, color: riskColor[item.riskLevel] }}>{item.현재수량}</div>
-                        <div style={{ fontSize: '0.65rem', color: '#9ca3af' }}>현재수량</div>
-                      </div>
+                    ))}
+                  </div>
+                )
+              )}
+
+              {/* 출고 확인 팝업 */}
+              {issuePopup && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
+                     onClick={() => !isIssuing && setIssuePopup(null)}>
+                  <div style={{ background: '#fff', borderRadius: '14px', padding: '20px', width: '90%', maxWidth: '360px' }}
+                       onClick={(e) => e.stopPropagation()}>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '4px' }}>{issuePopup.item.모델명}</div>
+                    <div style={{ fontSize: '0.75rem', color: '#6b7280', marginBottom: '14px' }}>
+                      {facilityName}에서 출고 · 현재고 {issuePopup.item.현재수량}개
                     </div>
-                    <div style={{ marginTop: '8px', display: 'flex', gap: '8px' }}>
-                      <div style={{ flex: 1, background: '#f9fafb', borderRadius: '7px', padding: '6px 8px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151' }}>{item.최소보유수량}</div>
-                        <div style={{ fontSize: '0.62rem', color: '#9ca3af' }}>최소보유</div>
-                      </div>
-                      <div style={{ flex: 1, background: '#f9fafb', borderRadius: '7px', padding: '6px 8px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151' }}>{item.avgPerEvent}</div>
-                        <div style={{ fontSize: '0.62rem', color: '#9ca3af' }}>회당출고</div>
-                      </div>
-                      <div style={{ flex: 2, background: '#f9fafb', borderRadius: '7px', padding: '6px 8px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: item.daysToEmpty !== null && item.daysToEmpty < 30 ? '#dc2626' : '#374151' }}>
-                          {item.daysToEmpty !== null ? `약 ${item.daysToEmpty}일` : '데이터 없음'}
-                        </div>
-                        <div style={{ fontSize: '0.62rem', color: '#9ca3af' }}>예상 소진 시점</div>
-                      </div>
+                    <label style={{ fontSize: '0.75rem', color: '#374151', fontWeight: 600 }}>출고 수량</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max={issuePopup.item.현재수량}
+                      value={issuePopup.qty}
+                      onChange={(e) => setIssuePopup({ ...issuePopup, qty: parseInt(e.target.value) || 0 })}
+                      style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', marginTop: '4px', marginBottom: '16px', fontSize: '1rem' }}
+                    />
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        onClick={() => setIssuePopup(null)}
+                        disabled={isIssuing}
+                        style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', background: '#fff', fontWeight: 600 }}
+                      >
+                        취소
+                      </button>
+                      <button
+                        onClick={handleIssueConfirm}
+                        disabled={isIssuing}
+                        style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: '#2563eb', color: '#fff', fontWeight: 700 }}
+                      >
+                        {isIssuing ? '처리 중...' : '출고 확정'}
+                      </button>
                     </div>
                   </div>
-                ))
+                </div>
               )}
             </div>
           )}
