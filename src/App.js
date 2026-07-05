@@ -1969,7 +1969,7 @@ function FacilityDashboardPage({ facilityName, inventoryData, onBack, onUpdate, 
 
   // 실수로 처리한 출고/입고를 되돌리기 (가장 최근 이력만 가능 — 서버에서 재검증)
   async function handleRollback(log) {
-    if (!window.confirm(`${log.모델명}의 "${log.action}" 처리를 되돌리시겠습니까?\n재고가 ${log.변경후수량}개 → ${log.변경전수량}개로 복원됩니다.`)) {
+    if (!window.confirm(`${log.모델명}의 "${log.action}" 처리를 되돌리시겠습니까?\n재고가 ${log.변경후수량}개 → ${log.변경전수량}개로 복원되고, 이 이력은 사용내역에서 삭제됩니다.`)) {
       return;
     }
     try {
@@ -1978,7 +1978,7 @@ function FacilityDashboardPage({ facilityName, inventoryData, onBack, onUpdate, 
         logId: log.id,
         user: userName,
       });
-      showToast && showToast(`${log.모델명} 이력이 되돌려졌습니다.`, 'success');
+      showToast && showToast(`${log.모델명} 이력을 되돌리고 삭제했습니다.`, 'success');
       await fetchLogs();
       onUpdate && await onUpdate();
     } catch (e) {
@@ -2422,15 +2422,12 @@ function FacilityDashboardPage({ facilityName, inventoryData, onBack, onUpdate, 
               ) : (
                 filteredHistoryLogs.map(log => {
                   const isOut = log.변경수량 < 0 || log.action === '출고';
-                  const isRolledBack = !!log.rolledBack;
-                  const isRollbackAction = log.action === '되돌리기';
                   return (
                     <div key={log.id} style={{
                       background: '#fff', borderRadius: '12px', padding: '12px 14px',
                       boxShadow: '0 1px 4px rgba(0,0,0,0.07)',
                       borderLeft: `4px solid ${isOut ? '#dc2626' : '#16a34a'}`,
                       transition: 'box-shadow 0.15s',
-                      opacity: isRolledBack ? 0.55 : 1,
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                         <span style={{
@@ -2443,12 +2440,7 @@ function FacilityDashboardPage({ facilityName, inventoryData, onBack, onUpdate, 
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
-                          <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1a1f2e' }}>
-                            {log.모델명}
-                            {isRolledBack && (
-                              <span style={{ marginLeft: '6px', fontSize: '0.65rem', fontWeight: 700, color: '#9ca3af' }}>(되돌려짐)</span>
-                            )}
-                          </div>
+                          <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1a1f2e' }}>{log.모델명}</div>
                           <div style={{ fontSize: '0.68rem', color: '#6b7280', marginTop: '1px' }}>{log.부품종류}</div>
                         </div>
                         <div style={{ textAlign: 'right' }}>
@@ -2464,19 +2456,17 @@ function FacilityDashboardPage({ facilityName, inventoryData, onBack, onUpdate, 
                         {log.user ? (
                           <div style={{ fontSize: '0.65rem', color: '#9ca3af' }}>👤 {log.user}</div>
                         ) : <div />}
-                        {!isRolledBack && !isRollbackAction && (
-                          <button
-                            onClick={() => handleRollback(log)}
-                            disabled={rollbackingId === log.id}
-                            style={{
-                              fontSize: '0.65rem', fontWeight: 700, color: '#2563eb',
-                              background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '6px',
-                              padding: '3px 8px', cursor: 'pointer',
-                            }}
-                          >
-                            {rollbackingId === log.id ? '처리 중...' : '↩️ 되돌리기'}
-                          </button>
-                        )}
+                        <button
+                          onClick={() => handleRollback(log)}
+                          disabled={rollbackingId === log.id}
+                          style={{
+                            fontSize: '0.65rem', fontWeight: 700, color: '#2563eb',
+                            background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '6px',
+                            padding: '3px 8px', cursor: 'pointer',
+                          }}
+                        >
+                          {rollbackingId === log.id ? '처리 중...' : '↩️ 되돌리기'}
+                        </button>
                       </div>
                     </div>
                   );
