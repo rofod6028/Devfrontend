@@ -848,7 +848,7 @@ function MainPage({ onSheetClick, onSparePartClick, facilityLists, onSummaryClic
   return (
     <div className="main-page">
       <div className="page-header">
-        <h1>스페어파츠 재고 관리</h1>
+        <h1>스페어파트 재고 관리</h1>
         <p className="page-subtitle">설비를 선택해 이력을 확인하거나, 공통 탭에서 재고를 관리하세요</p>
       </div>
 
