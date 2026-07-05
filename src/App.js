@@ -452,11 +452,18 @@ function App() {
     setPage('facilityDashboard'); // 설비 대시보드로 이동
   };
 
-  // 3. 메인에서 "공통" 카드 클릭 시 실행 → 전체 부품 리스트로 바로 이동
+  // 3. 메인에서 "공통" 카드 클릭 시 실행 → "~관련" 카테고리 선택 화면으로 이동
   const handleSparePartClick = () => {
     setSelectedSheet('공통');
-    setDetailItems(inventoryData);
-    setSelectedCategory('공통');
+    setPage('commonCategory');
+  };
+
+  // 3-1. 카테고리 선택 화면에서 특정 "~관련" 카테고리 클릭 시 실행 → 해당 카테고리 부품 리스트로 이동
+  const handleCommonCategoryClick = (categoryName) => {
+    const filtered = inventoryData.filter(item => (item.대분류 || '미분류') === categoryName);
+    setSelectedSheet('공통');
+    setDetailItems(filtered);
+    setSelectedCategory(categoryName);
     setPage('detail');
   };
 
@@ -583,12 +590,21 @@ function App() {
   if (loading) return <div className="loading-spinner"><div className="spinner"></div><p>로드 중...</p></div>;
 
   switch (page) {
-    case 'detail': // 부품 리스트 및 수정 (공통 시트 전체 목록)
+    case 'commonCategory': // 공통 탭: "~관련" 카테고리 선택 화면
+      return (
+        <CommonCategoryPage
+          inventoryData={inventoryData}
+          onCategoryClick={handleCommonCategoryClick}
+          onBack={() => setPage('main')}
+        />
+      );
+
+    case 'detail': // 부품 리스트 및 수정 (선택한 카테고리의 부품 목록)
       return (
         <DetailPage
           items={detailItems}
           categoryName={selectedCategory}
-          onBack={() => setPage(selectedSheet === '공통' ? 'main' : 'facilityDashboard')}
+          onBack={() => setPage(selectedSheet === '공통' ? 'commonCategory' : 'facilityDashboard')}
           onUpdate={refreshData}
           userName={userName}
           highlightId={highlightId}
@@ -870,19 +886,8 @@ function MainPage({ onSheetClick, onSparePartClick, facilityLists, onSummaryClic
         </div>
       )}
 
-      {/* ✨ 공통 (전체 재고 관리) */}
+      {/* ✨ 설비 공정 버튼 그리드 — 설비 목록(충전/타정) 기반 동적 목록, 맨 위에 배치 */}
       <div className="category-grid">
-        <button className="category-card" onClick={onSparePartClick} style={{ borderColor: '#2563eb' }}>
-          <div className="category-icon-wrap">📦</div>
-          <div className="category-label">공통</div>
-          <div className="category-meta">
-            <span className="category-count">전체 부품 재고 관리</span>
-          </div>
-        </button>
-      </div>
-
-      {/* ✨ 설비 공정 버튼 그리드 — 설비 목록(충전/타정) 기반 동적 목록 */}
-      <div className="category-grid" style={{ marginTop: '10px' }}>
         {processSheets.map((sheet) => (
           <button
             key={sheet}
@@ -898,6 +903,21 @@ function MainPage({ onSheetClick, onSparePartClick, facilityLists, onSummaryClic
             </div>
           </button>
         ))}
+      </div>
+
+      {/* ✨ 공통 (전체 재고 관리) — 충전/타정 사이 아래, 가운데 배치 */}
+      <div style={{ display: 'flex', justifyContent: 'center', marginTop: '10px' }}>
+        <button
+          className="category-card"
+          onClick={onSparePartClick}
+          style={{ borderColor: '#2563eb', width: '100%', maxWidth: '260px' }}
+        >
+          <div className="category-icon-wrap">📦</div>
+          <div className="category-label">공통</div>
+          <div className="category-meta">
+            <span className="category-count">전체 부품 재고 관리</span>
+          </div>
+        </button>
       </div>
     </div>
   );
@@ -942,6 +962,67 @@ function FacilityPage({ selectedSheet, facilities, onFacilityClick, onBack }) {
         ) : (
           <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '20px', color: '#666' }}>
             <p>⚠️ 등록된 설비가 없습니다</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+// ============================================================
+// CommonCategoryPage (공통 탭 1단계 — "~관련" 카테고리 선택 화면)
+// ============================================================
+function CommonCategoryPage({ inventoryData, onCategoryClick, onBack }) {
+  const categories = React.useMemo(() => {
+    const map = {};
+    (inventoryData || []).forEach(item => {
+      const catName = item.대분류 || '미분류';
+      if (!map[catName]) {
+        map[catName] = { name: catName, itemCount: 0, lowStockCount: 0 };
+      }
+      map[catName].itemCount += 1;
+      if (item.최소보유수량 > 0 && item.현재수량 <= item.최소보유수량) {
+        map[catName].lowStockCount += 1;
+      }
+    });
+    return Object.values(map).sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+  }, [inventoryData]);
+
+  return (
+    <div className="facility-page">
+      <div className="detail-header">
+        <button className="back-btn" onClick={onBack}>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12,19 5,12 12,5" />
+          </svg>
+          메인으로
+        </button>
+        <div className="detail-category-header">
+          <h2 className="main-cat-title">공통 부품</h2>
+          <span className="sub-cat-badge">카테고리를 선택하세요</span>
+        </div>
+      </div>
+
+      <div className="category-grid" style={{ marginTop: '20px' }}>
+        {categories.length > 0 ? (
+          categories.map((cat) => (
+            <button
+              key={cat.name}
+              className="category-card"
+              onClick={() => onCategoryClick(cat.name)}
+              style={{ minHeight: '110px' }}
+            >
+              <div className="category-icon-wrap" style={{ background: '#f0f9ff' }}>🔧</div>
+              <div className="category-label" style={{ fontSize: '1.1rem' }}>{cat.name}</div>
+              <div className="category-meta">
+                <span className="category-count">
+                  {cat.itemCount}개 품목{cat.lowStockCount > 0 ? ` · 부족 ${cat.lowStockCount}` : ''}
+                </span>
+              </div>
+            </button>
+          ))
+        ) : (
+          <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '20px', color: '#666' }}>
+            <p>⚠️ 등록된 카테고리가 없습니다</p>
           </div>
         )}
       </div>
