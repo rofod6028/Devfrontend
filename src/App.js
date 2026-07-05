@@ -2049,6 +2049,54 @@ function FacilityDashboardPage({ facilityName, inventoryData, onBack, onUpdate, 
   });
   const maxTrend = Math.max(...trendEntries.map(([, v]) => v.total), 1);
 
+  // ── 1개월 주별 출고 추이 (최근 1개월, outLogs 기준) ──
+  const weeklyTrend1M = {};
+  outLogs.forEach(log => {
+    const d = parseKSTDate(log.timestampKR);
+    if (!d) return;
+    const day = d.getDay();
+    const monday = new Date(d);
+    monday.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
+    const key = `${monday.getMonth() + 1}/${monday.getDate()}`;
+    const model = log.모델명 || '미상';
+    const qty = Math.abs(Number(log.변경수량) || 0);
+    if (!weeklyTrend1M[key]) weeklyTrend1M[key] = { total: 0, parts: {} };
+    weeklyTrend1M[key].total += qty;
+    weeklyTrend1M[key].parts[model] = (weeklyTrend1M[key].parts[model] || 0) + qty;
+  });
+  const trend1MEntries = Object.entries(weeklyTrend1M).sort(([a], [b]) => {
+    const [am, ad] = a.split('/').map(Number);
+    const [bm, bd] = b.split('/').map(Number);
+    return am !== bm ? am - bm : ad - bd;
+  });
+  const maxTrend1M = Math.max(...trend1MEntries.map(([, v]) => v.total), 1);
+
+  // ── 6개월 월별 출고 추이 (sixMonthOutLogs 기준, 데이터 없는 달도 0으로 표시) ──
+  const monthlyTrendMap = {}; // key: 'YYYY-M'
+  sixMonthOutLogs.forEach(log => {
+    const d = parseKSTDate(log.timestampKR);
+    if (!d) return;
+    const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
+    const model = log.모델명 || '미상';
+    const qty = Math.abs(Number(log.변경수량) || 0);
+    if (!monthlyTrendMap[key]) monthlyTrendMap[key] = { total: 0, parts: {} };
+    monthlyTrendMap[key].total += qty;
+    monthlyTrendMap[key].parts[model] = (monthlyTrendMap[key].parts[model] || 0) + qty;
+  });
+  const monthlyEntries = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(1); // 월말 overflow 방지
+    d.setMonth(d.getMonth() - i);
+    const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
+    const label = `${d.getMonth() + 1}월`;
+    monthlyEntries.push([label, monthlyTrendMap[key] || { total: 0, parts: {} }]);
+  }
+  const maxMonthlyTrend = Math.max(...monthlyEntries.map(([, v]) => v.total), 1);
+
+  // ── 부품별 출고량 부가 통계 (전체 대비 비중 계산용) ──
+  const totalAllPartQty = Object.values(partConsumption).reduce((s, p) => s + p.total, 0) || 1;
+
   // ── 이력 목록: 필터(입고/출고) + 검색(모델명/부품종류) 적용 ──
   const filteredHistoryLogs = facilityLogs.filter(log => {
     const isOut = log.변경수량 < 0 || log.action === '출고';
@@ -2131,72 +2179,80 @@ function FacilityDashboardPage({ facilityName, inventoryData, onBack, onUpdate, 
 
               {/* 기간 레이블 */}
               <div style={{ fontSize: '0.7rem', color: '#9ca3af', textAlign: 'right' }}>
-                📊 소모분석: 최근 1개월 | 추이: 최근 6개월
+                📊 소모분석: 최근 1개월 | 추이: 1개월(주별) · 6개월(월별)
               </div>
 
-              {/* 차트 두 개 가로 배치 */}
+              {/* 부품별 출고량 (전체 폭) */}
+              <div style={{ background: '#fff', borderRadius: '12px', padding: '11px 10px', boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
+                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#1a1f2e', marginBottom: '10px', lineHeight: 1.3 }}>
+                  🔧 부품별 출고량
+                  <span style={{ fontSize: '0.62rem', color: '#9ca3af', fontWeight: 400, marginLeft: '4px' }}>최근 1개월</span>
+                </div>
+                {sortedParts.length === 0 ? (
+                  <div style={{ textAlign: 'center', color: '#9ca3af', padding: '16px 0', fontSize: '0.72rem' }}>이력 없음</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {sortedParts.map((part, i) => {
+                      const pct = (part.total / maxTotal) * 100;
+                      const share = ((part.total / totalAllPartQty) * 100).toFixed(1);
+                      const avgPerOut = (part.total / part.count).toFixed(1);
+                      const currentItem = inventoryData.find(item => item.모델명 === part.model);
+                      const isLow = currentItem && currentItem.최소보유수량 > 0 && currentItem.현재수량 <= currentItem.최소보유수량;
+                      const barColor = isLow ? '#dc2626' : i < 3 ? '#2563eb' : '#93c5fd';
+                      return (
+                        <div key={part.model}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.66rem', color: '#374151', fontWeight: 600, maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {isLow && <span style={{ color: '#dc2626' }}>⚠ </span>}
+                              {part.model}
+                            </span>
+                            <span style={{ fontSize: '0.64rem', color: barColor, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                              {part.total}개
+                            </span>
+                          </div>
+                          <div style={{ background: '#f3f4f6', borderRadius: '3px', height: '6px', overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${pct}%`, borderRadius: '3px', background: barColor, transition: 'width 0.5s ease' }} />
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
+                            <span style={{ fontSize: '0.58rem', color: '#9ca3af' }}>
+                              {part.count}건 · 평균 {avgPerOut}개/건
+                            </span>
+                            <span style={{ fontSize: '0.58rem', color: '#6b7280', fontWeight: 600 }}>
+                              전체 비중 {share}%
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* 1개월 / 6개월 출고 추이 (가로 2분할) */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', alignItems: 'start' }}>
 
-                {/* 왼쪽: 부품별 출고량 */}
-                <div style={{ background: '#fff', borderRadius: '12px', padding: '11px 10px', boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#1a1f2e', marginBottom: '10px', lineHeight: 1.3 }}>
-                    🔧 부품별 출고량
-                  </div>
-                  {sortedParts.length === 0 ? (
-                    <div style={{ textAlign: 'center', color: '#9ca3af', padding: '16px 0', fontSize: '0.72rem' }}>이력 없음</div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {sortedParts.map((part, i) => {
-                        const pct = (part.total / maxTotal) * 100;
-                        const currentItem = inventoryData.find(item => item.모델명 === part.model);
-                        const isLow = currentItem && currentItem.최소보유수량 > 0 && currentItem.현재수량 <= currentItem.최소보유수량;
-                        const barColor = isLow ? '#dc2626' : i < 3 ? '#2563eb' : '#93c5fd';
-                        return (
-                          <div key={part.model}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px', alignItems: 'center' }}>
-                              <span style={{ fontSize: '0.62rem', color: '#374151', fontWeight: 600, maxWidth: '55%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {isLow && <span style={{ color: '#dc2626' }}>⚠ </span>}
-                                {part.model}
-                              </span>
-                              <span style={{ fontSize: '0.6rem', color: barColor, fontWeight: 700, whiteSpace: 'nowrap' }}>
-                                {part.total}개
-                              </span>
-                            </div>
-                            <div style={{ background: '#f3f4f6', borderRadius: '3px', height: '6px', overflow: 'hidden' }}>
-                              <div style={{ height: '100%', width: `${pct}%`, borderRadius: '3px', background: barColor, transition: 'width 0.5s ease' }} />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                {/* 오른쪽: 주별 출고 추이 */}
+                {/* 왼쪽: 1개월 주별 추이 */}
                 <div style={{ background: '#fff', borderRadius: '12px', padding: '11px 10px', boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
                   <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#1a1f2e', marginBottom: '4px', lineHeight: 1.3 }}>
-                    📅 주별 출고 추이
-                    <span style={{ fontSize: '0.62rem', color: '#9ca3af', fontWeight: 400, marginLeft: '4px' }}>최근 6개월</span>
+                    📅 주별 추이
+                    <span style={{ fontSize: '0.62rem', color: '#9ca3af', fontWeight: 400, marginLeft: '4px' }}>최근 1개월</span>
                   </div>
-                  {/* 범례 */}
                   {top3Models.length > 0 && (
                     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
                       {top3Models.map((m, i) => (
                         <span key={m} style={{ fontSize: '0.55rem', color: trendColors[i], fontWeight: 700, display: 'flex', alignItems: 'center', gap: '2px' }}>
                           <span style={{ width: 7, height: 7, borderRadius: '50%', background: trendColors[i], display: 'inline-block' }} />
-                          {m.length > 10 ? m.slice(0, 10) + '…' : m}
+                          {m.length > 8 ? m.slice(0, 8) + '…' : m}
                         </span>
                       ))}
-                      {sixMonthOutLogs.length > 0 && <span style={{ fontSize: '0.55rem', color: '#9ca3af', marginLeft: 'auto' }}>기타 포함</span>}
                     </div>
                   )}
-                  {trendEntries.length === 0 ? (
-                    <div style={{ textAlign: 'center', color: '#9ca3af', padding: '16px 0', fontSize: '0.72rem' }}>6개월 이내 출고 내역 없음</div>
+                  {trend1MEntries.length === 0 ? (
+                    <div style={{ textAlign: 'center', color: '#9ca3af', padding: '16px 0', fontSize: '0.7rem' }}>1개월 이내 출고 내역 없음</div>
                   ) : (
                     <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '120px', padding: '0 2px', overflowX: 'auto' }}>
-                      {trendEntries.map(([week, val]) => {
-                        const barH = Math.max((val.total / maxTrend) * 80, 4);
-                        // 상위 3 부품 스택 비율 계산
+                      {trend1MEntries.map(([week, val]) => {
+                        const barH = Math.max((val.total / maxTrend1M) * 80, 4);
                         const segments = top3Models.map(m => ({
                           model: m,
                           qty: val.parts[m] || 0,
@@ -2219,7 +2275,7 @@ function FacilityDashboardPage({ facilityName, inventoryData, onBack, onUpdate, 
                                 );
                               })}
                             </div>
-                            <div style={{ fontSize: '0.5rem', color: '#9ca3af', textAlign: 'center', lineHeight: 1.2, writingMode: 'horizontal-tb' }}>
+                            <div style={{ fontSize: '0.5rem', color: '#9ca3af', textAlign: 'center', lineHeight: 1.2 }}>
                               {week}
                             </div>
                           </div>
@@ -2227,6 +2283,59 @@ function FacilityDashboardPage({ facilityName, inventoryData, onBack, onUpdate, 
                       })}
                     </div>
                   )}
+                </div>
+
+                {/* 오른쪽: 6개월 월별 추이 */}
+                <div style={{ background: '#fff', borderRadius: '12px', padding: '11px 10px', boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#1a1f2e', marginBottom: '4px', lineHeight: 1.3 }}>
+                    📆 월별 추이
+                    <span style={{ fontSize: '0.62rem', color: '#9ca3af', fontWeight: 400, marginLeft: '4px' }}>최근 6개월</span>
+                  </div>
+                  {top3Models.length > 0 && (
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                      {top3Models.map((m, i) => (
+                        <span key={m} style={{ fontSize: '0.55rem', color: trendColors[i], fontWeight: 700, display: 'flex', alignItems: 'center', gap: '2px' }}>
+                          <span style={{ width: 7, height: 7, borderRadius: '50%', background: trendColors[i], display: 'inline-block' }} />
+                          {m.length > 8 ? m.slice(0, 8) + '…' : m}
+                        </span>
+                      ))}
+                      {sixMonthOutLogs.length > 0 && <span style={{ fontSize: '0.55rem', color: '#9ca3af', marginLeft: 'auto' }}>기타 포함</span>}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: '120px', padding: '0 2px' }}>
+                    {monthlyEntries.map(([label, val]) => {
+                      const barH = val.total > 0 ? Math.max((val.total / maxMonthlyTrend) * 80, 4) : 0;
+                      const segments = top3Models.map(m => ({
+                        model: m,
+                        qty: val.parts[m] || 0,
+                        color: trendColors[top3Models.indexOf(m)],
+                      })).filter(s => s.qty > 0);
+                      const otherQty = val.total - segments.reduce((s, x) => s + x.qty, 0);
+                      if (otherQty > 0) segments.push({ model: '기타', qty: otherQty, color: '#d1d5db' });
+                      return (
+                        <div key={label} style={{ minWidth: '24px', flex: '1 1 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                          <div style={{ fontSize: '0.55rem', color: '#6b7280', fontWeight: 600 }}>{val.total}</div>
+                          <div style={{ width: '18px', display: 'flex', flexDirection: 'column-reverse', alignItems: 'center', height: '80px', justifyContent: 'flex-start' }}>
+                            {val.total === 0 ? (
+                              <div style={{ width: '100%', height: '2px', background: '#f3f4f6', borderRadius: '3px' }} />
+                            ) : segments.map((seg, si) => {
+                              const segH = Math.max((seg.qty / val.total) * barH, 2);
+                              return (
+                                <div key={si} title={`${seg.model}: ${seg.qty}개`} style={{
+                                  width: '100%', height: `${segH}px`,
+                                  background: seg.color,
+                                  borderRadius: si === segments.length - 1 ? '3px 3px 0 0' : '0',
+                                }} />
+                              );
+                            })}
+                          </div>
+                          <div style={{ fontSize: '0.5rem', color: '#9ca3af', textAlign: 'center', lineHeight: 1.2 }}>
+                            {label}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             </div>
