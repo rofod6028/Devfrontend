@@ -10,7 +10,15 @@ const USER_MAP = {
   "219153": "조재빈",
   "223091": "이재성",
   "226069": "강현준",
-  "219149": "가왕현"
+  "219149": "가왕현",
+  "214161": "유태현",
+  "217024": "이용현",
+  "218105": "김동우",
+  "215212": "박일구",
+  "225207": "이정무",
+  "225245": "조윤수",
+  "223100": "김회준",
+  "211067": "김욱재"
   // 필요한 만큼 사번: "이름" 형태로 추가하세요.
 };
 
@@ -840,7 +848,7 @@ function MainPage({ onSheetClick, onSparePartClick, facilityLists, onSummaryClic
   return (
     <div className="main-page">
       <div className="page-header">
-        <h1>스페어파츠 재고 관리</h1>
+        <h1>스페어파트 재고 관리</h1>
         <p className="page-subtitle">설비를 선택해 이력을 확인하거나, 공통 탭에서 재고를 관리하세요</p>
       </div>
 
