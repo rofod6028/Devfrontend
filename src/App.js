@@ -1947,21 +1947,47 @@ function FacilityDashboardPage({ facilityName, inventoryData, onBack, onUpdate, 
     }
   }
 
-  useEffect(() => {
-    async function fetchLogs() {
-      setLoadingLogs(true);
-      try {
-        const res = await axios.get(`${BASE_URL}/inventory/facility-logs?facility=${encodeURIComponent(facilityName)}&limit=500`);
-        setFacilityLogs(res.data.data || []);
-      } catch (e) {
-        console.error('설비이력 로드 실패:', e);
-        setFacilityLogs([]);
-      } finally {
-        setLoadingLogs(false);
-      }
+  const [rollbackingId, setRollbackingId] = useState(null);
+
+  const fetchLogs = async () => {
+    setLoadingLogs(true);
+    try {
+      const res = await axios.get(`${BASE_URL}/inventory/facility-logs?facility=${encodeURIComponent(facilityName)}&limit=500`);
+      setFacilityLogs(res.data.data || []);
+    } catch (e) {
+      console.error('설비이력 로드 실패:', e);
+      setFacilityLogs([]);
+    } finally {
+      setLoadingLogs(false);
     }
+  };
+
+  useEffect(() => {
     fetchLogs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [facilityName]);
+
+  // 실수로 처리한 출고/입고를 되돌리기 (가장 최근 이력만 가능 — 서버에서 재검증)
+  async function handleRollback(log) {
+    if (!window.confirm(`${log.모델명}의 "${log.action}" 처리를 되돌리시겠습니까?\n재고가 ${log.변경후수량}개 → ${log.변경전수량}개로 복원됩니다.`)) {
+      return;
+    }
+    try {
+      setRollbackingId(log.id);
+      await axios.post(`${BASE_URL}/inventory/rollback-log`, {
+        logId: log.id,
+        user: userName,
+      });
+      showToast && showToast(`${log.모델명} 이력이 되돌려졌습니다.`, 'success');
+      await fetchLogs();
+      onUpdate && await onUpdate();
+    } catch (e) {
+      console.error('되돌리기 실패:', e);
+      showToast && showToast(e.response?.data?.message || '되돌리기 처리 중 오류가 발생했습니다.', 'error');
+    } finally {
+      setRollbackingId(null);
+    }
+  }
 
   // ── 최근 6개월 필터 (주별 추이는 6개월, 소모분석은 1개월) ──
   const oneMonthAgo = new Date();
@@ -2396,12 +2422,15 @@ function FacilityDashboardPage({ facilityName, inventoryData, onBack, onUpdate, 
               ) : (
                 filteredHistoryLogs.map(log => {
                   const isOut = log.변경수량 < 0 || log.action === '출고';
+                  const isRolledBack = !!log.rolledBack;
+                  const isRollbackAction = log.action === '되돌리기';
                   return (
                     <div key={log.id} style={{
                       background: '#fff', borderRadius: '12px', padding: '12px 14px',
                       boxShadow: '0 1px 4px rgba(0,0,0,0.07)',
                       borderLeft: `4px solid ${isOut ? '#dc2626' : '#16a34a'}`,
                       transition: 'box-shadow 0.15s',
+                      opacity: isRolledBack ? 0.55 : 1,
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                         <span style={{
@@ -2414,7 +2443,12 @@ function FacilityDashboardPage({ facilityName, inventoryData, onBack, onUpdate, 
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
-                          <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1a1f2e' }}>{log.모델명}</div>
+                          <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1a1f2e' }}>
+                            {log.모델명}
+                            {isRolledBack && (
+                              <span style={{ marginLeft: '6px', fontSize: '0.65rem', fontWeight: 700, color: '#9ca3af' }}>(되돌려짐)</span>
+                            )}
+                          </div>
                           <div style={{ fontSize: '0.68rem', color: '#6b7280', marginTop: '1px' }}>{log.부품종류}</div>
                         </div>
                         <div style={{ textAlign: 'right' }}>
@@ -2426,9 +2460,24 @@ function FacilityDashboardPage({ facilityName, inventoryData, onBack, onUpdate, 
                           </div>
                         </div>
                       </div>
-                      {log.user && (
-                        <div style={{ marginTop: '6px', fontSize: '0.65rem', color: '#9ca3af' }}>👤 {log.user}</div>
-                      )}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
+                        {log.user ? (
+                          <div style={{ fontSize: '0.65rem', color: '#9ca3af' }}>👤 {log.user}</div>
+                        ) : <div />}
+                        {!isRolledBack && !isRollbackAction && (
+                          <button
+                            onClick={() => handleRollback(log)}
+                            disabled={rollbackingId === log.id}
+                            style={{
+                              fontSize: '0.65rem', fontWeight: 700, color: '#2563eb',
+                              background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '6px',
+                              padding: '3px 8px', cursor: 'pointer',
+                            }}
+                          >
+                            {rollbackingId === log.id ? '처리 중...' : '↩️ 되돌리기'}
+                          </button>
+                        )}
+                      </div>
                     </div>
                   );
                 })
