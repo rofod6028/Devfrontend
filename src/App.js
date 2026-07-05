@@ -934,6 +934,11 @@ function MainPage({ onSheetClick, onSparePartClick, facilityLists, onSummaryClic
 // FacilityPage (2단계 — 공정 내 설비 리스트 선택)
 // ============================================================
 function FacilityPage({ selectedSheet, facilities, onFacilityClick, onBack }) {
+  const [query, setQuery] = useState('');
+
+  const normalize = (s) => String(s || '').toLowerCase().replace(/[\s\-_]+/g, '');
+  const filtered = (facilities || []).filter(f => normalize(f).includes(normalize(query)));
+
   return (
     <div className="facility-page">
       <div className="detail-header">
@@ -949,27 +954,60 @@ function FacilityPage({ selectedSheet, facilities, onFacilityClick, onBack }) {
         </div>
       </div>
 
-      <div className="category-grid" style={{ marginTop: '20px' }}>
-        {facilities && facilities.length > 0 ? (
-          facilities.map((facility) => (
+      {/* 설비 검색창 */}
+      <div className="search-input-wrap" style={{ position: 'relative', marginTop: '16px' }}>
+        <svg className="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input
+          type="text"
+          className="search-input"
+          placeholder={`${selectedSheet} 설비명 검색...`}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        {query && (
+          <button className="search-clear" onClick={() => setQuery('')}>✕</button>
+        )}
+      </div>
+
+      <div style={{ fontSize: '0.7rem', color: '#9ca3af', textAlign: 'right', margin: '8px 2px 4px' }}>
+        {filtered.length}개 설비{query ? ` (전체 ${facilities.length}개 중 검색)` : ''}
+      </div>
+
+      {/* 설비 목록 — 카드 그리드 대신 스캔하기 쉬운 리스트 형식 */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        {filtered.length > 0 ? (
+          filtered.map((facility) => (
             <button
               key={facility}
-              className="category-card"
               onClick={() => onFacilityClick(facility)}
-              style={{ minHeight: '110px' }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '12px',
+                width: '100%', textAlign: 'left', cursor: 'pointer',
+                background: '#fff', border: '1px solid #eef0f3', borderRadius: '10px',
+                padding: '10px 14px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+              }}
             >
-              <div className="category-icon-wrap" style={{ background: '#f0f9ff' }}>
+              <div style={{
+                width: '34px', height: '34px', borderRadius: '8px', background: '#f0f9ff',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', flexShrink: 0,
+              }}>
                 {getFacilityIcon(facility)}
               </div>
-              <div className="category-label" style={{ fontSize: '1.1rem' }}>{facility}</div>
-              <div className="category-meta">
-                <span className="category-count">이력 및 분석 보기</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1a1f2e', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {facility}
+                </div>
               </div>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#9ca3af" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                <polyline points="9,18 15,12 9,6" />
+              </svg>
             </button>
           ))
         ) : (
-          <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '20px', color: '#666' }}>
-            <p>⚠️ 등록된 설비가 없습니다</p>
+          <div style={{ textAlign: 'center', padding: '30px 0', color: '#9ca3af', fontSize: '0.85rem' }}>
+            {facilities && facilities.length > 0 ? '검색 결과가 없습니다' : '⚠️ 등록된 설비가 없습니다'}
           </div>
         )}
       </div>
