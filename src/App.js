@@ -848,7 +848,7 @@ function MainPage({ onSheetClick, onSparePartClick, facilityLists, onSummaryClic
   return (
     <div className="main-page">
       <div className="page-header">
-        <h1>스페어파트 재고 관리</h1>
+        <h1>스페어파츠 재고 관리</h1>
         <p className="page-subtitle">설비를 선택해 이력을 확인하거나, 공통 탭에서 재고를 관리하세요</p>
       </div>
 
@@ -1851,6 +1851,10 @@ function FacilityDashboardPage({ facilityName, inventoryData, onBack, onUpdate, 
   const [facilityLogs, setFacilityLogs] = useState([]);
   const [loadingLogs, setLoadingLogs] = useState(true);
 
+  // ── 이력 목록 필터 / 검색 ──
+  const [historyFilter, setHistoryFilter] = useState('all'); // 'all' | 'in' | 'out'
+  const [historySearch, setHistorySearch] = useState('');
+
   // ── 부품 검색 (이 설비에서 쓸 공통부품을 찾아 바로 출고) ──
   const [partSearchQuery, setPartSearchQuery] = useState('');
   const [partSearchResults, setPartSearchResults] = useState([]);
@@ -2007,6 +2011,20 @@ function FacilityDashboardPage({ facilityName, inventoryData, onBack, onUpdate, 
   });
   const maxTrend = Math.max(...trendEntries.map(([, v]) => v.total), 1);
 
+  // ── 이력 목록: 필터(입고/출고) + 검색(모델명/부품종류) 적용 ──
+  const filteredHistoryLogs = facilityLogs.filter(log => {
+    const isOut = log.변경수량 < 0 || log.action === '출고';
+    if (historyFilter === 'in' && isOut) return false;
+    if (historyFilter === 'out' && !isOut) return false;
+    if (historySearch.trim()) {
+      const q = historySearch.trim().toLowerCase().replace(/[\s\-_]+/g, '');
+      const model = String(log.모델명 || '').toLowerCase().replace(/[\s\-_]+/g, '');
+      const type = String(log.부품종류 || '').toLowerCase().replace(/[\s\-_]+/g, '');
+      if (!model.includes(q) && !type.includes(q)) return false;
+    }
+    return true;
+  });
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
       {/* 헤더 */}
@@ -2024,20 +2042,24 @@ function FacilityDashboardPage({ facilityName, inventoryData, onBack, onUpdate, 
       </div>
 
       {/* 요약 카드 */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', padding: '12px 0 4px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', padding: '14px 0 4px' }}>
         {[
-          { label: '사용 부품 종류', value: Object.keys(allPartConsumption).length + '종', color: '#2563eb', bg: '#dbeafe' },
-          { label: '1개월 출고', value: outLogs.length + '건', color: '#7c3aed', bg: '#ede9fe' },
+          { label: '사용 부품 종류', value: Object.keys(allPartConsumption).length + '종', color: '#2563eb', bg: 'linear-gradient(135deg, #dbeafe, #eff6ff)', icon: '🔧' },
+          { label: '1개월 출고', value: outLogs.length + '건', color: '#7c3aed', bg: 'linear-gradient(135deg, #ede9fe, #f5f3ff)', icon: '📦' },
         ].map(card => (
-          <div key={card.label} style={{ background: card.bg, borderRadius: '10px', padding: '10px 8px', textAlign: 'center' }}>
-            <div style={{ fontSize: '1.2rem', fontWeight: 800, color: card.color }}>{card.value}</div>
-            <div style={{ fontSize: '0.7rem', color: '#6b7280', marginTop: '2px', fontWeight: 500 }}>{card.label}</div>
+          <div key={card.label} style={{
+            background: card.bg, borderRadius: '14px', padding: '14px 10px', textAlign: 'center',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.05)', border: '1px solid rgba(255,255,255,0.6)',
+          }}>
+            <div style={{ fontSize: '1.05rem', marginBottom: '2px' }}>{card.icon}</div>
+            <div style={{ fontSize: '1.3rem', fontWeight: 800, color: card.color, letterSpacing: '-0.02em' }}>{card.value}</div>
+            <div style={{ fontSize: '0.7rem', color: '#6b7280', marginTop: '2px', fontWeight: 600 }}>{card.label}</div>
           </div>
         ))}
       </div>
 
       {/* 탭 */}
-      <div style={{ display: 'flex', borderBottom: '2px solid #e2e6ea', marginTop: '10px' }}>
+      <div style={{ display: 'flex', gap: '4px', background: '#f3f4f6', borderRadius: '10px', padding: '4px', marginTop: '14px' }}>
         {[
           { id: 'analysis', icon: '📊', label: '소모 분석' },
           { id: 'history', icon: '📋', label: '이력 목록' },
@@ -2047,11 +2069,12 @@ function FacilityDashboardPage({ facilityName, inventoryData, onBack, onUpdate, 
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             style={{
-              flex: 1, border: 'none', background: 'none', padding: '10px 4px',
+              flex: 1, border: 'none', borderRadius: '8px', padding: '8px 4px', cursor: 'pointer',
               fontSize: '0.78rem', fontWeight: activeTab === tab.id ? 700 : 500,
               color: activeTab === tab.id ? '#2563eb' : '#6b7280',
-              borderBottom: activeTab === tab.id ? '2.5px solid #2563eb' : '2.5px solid transparent',
-              marginBottom: '-2px', cursor: 'pointer', transition: 'all 0.15s',
+              background: activeTab === tab.id ? '#fff' : 'transparent',
+              boxShadow: activeTab === tab.id ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+              transition: 'all 0.15s',
             }}
           >
             {tab.icon} {tab.label}
@@ -2173,21 +2196,69 @@ function FacilityDashboardPage({ facilityName, inventoryData, onBack, onUpdate, 
 
           {/* ── 탭2: 이력 목록 ── */}
           {activeTab === 'history' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {facilityLogs.length === 0 ? (
-                <div style={{ textAlign: 'center', color: '#9ca3af', padding: '30px 0', fontSize: '0.85rem' }}>이력이 없습니다</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+
+              {/* 필터 버튼 + 검색 */}
+              <div style={{ display: 'flex', gap: '6px' }}>
+                {[
+                  { id: 'all', label: '전체' },
+                  { id: 'in', label: '📥 입고' },
+                  { id: 'out', label: '📤 출고' },
+                ].map(f => (
+                  <button
+                    key={f.id}
+                    onClick={() => setHistoryFilter(f.id)}
+                    style={{
+                      flex: 1, padding: '7px 0', borderRadius: '8px', cursor: 'pointer',
+                      fontSize: '0.75rem', fontWeight: 700,
+                      border: historyFilter === f.id ? '1.5px solid #2563eb' : '1.5px solid #e5e7eb',
+                      background: historyFilter === f.id ? '#eff6ff' : '#fff',
+                      color: historyFilter === f.id ? '#2563eb' : '#6b7280',
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="search-input-wrap" style={{ position: 'relative' }}>
+                <svg className="search-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <input
+                  type="text"
+                  className="search-input"
+                  placeholder="모델명, 부품종류로 이력 검색..."
+                  value={historySearch}
+                  onChange={(e) => setHistorySearch(e.target.value)}
+                />
+                {historySearch && (
+                  <button className="search-clear" onClick={() => setHistorySearch('')}>✕</button>
+                )}
+              </div>
+
+              <div style={{ fontSize: '0.68rem', color: '#9ca3af', textAlign: 'right' }}>
+                {filteredHistoryLogs.length}건 표시 중 (전체 {facilityLogs.length}건)
+              </div>
+
+              {filteredHistoryLogs.length === 0 ? (
+                <div style={{ textAlign: 'center', color: '#9ca3af', padding: '30px 0', fontSize: '0.85rem' }}>
+                  {facilityLogs.length === 0 ? '이력이 없습니다' : '조건에 맞는 이력이 없습니다'}
+                </div>
               ) : (
-                facilityLogs.map(log => {
+                filteredHistoryLogs.map(log => {
                   const isOut = log.변경수량 < 0 || log.action === '출고';
                   return (
                     <div key={log.id} style={{
-                      background: '#fff', borderRadius: '10px', padding: '11px 13px',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-                      borderLeft: `3px solid ${isOut ? '#dc2626' : '#16a34a'}`,
+                      background: '#fff', borderRadius: '12px', padding: '12px 14px',
+                      boxShadow: '0 1px 4px rgba(0,0,0,0.07)',
+                      borderLeft: `4px solid ${isOut ? '#dc2626' : '#16a34a'}`,
+                      transition: 'box-shadow 0.15s',
                     }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                         <span style={{
-                          fontSize: '0.7rem', fontWeight: 700, padding: '2px 7px', borderRadius: '5px',
+                          fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '6px',
                           background: isOut ? '#fee2e2' : '#dcfce7', color: isOut ? '#dc2626' : '#16a34a',
                         }}>
                           {isOut ? '📤 출고' : '📥 입고'}
@@ -2196,11 +2267,11 @@ function FacilityDashboardPage({ facilityName, inventoryData, onBack, onUpdate, 
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
-                          <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#1a1f2e' }}>{log.모델명}</div>
+                          <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1a1f2e' }}>{log.모델명}</div>
                           <div style={{ fontSize: '0.68rem', color: '#6b7280', marginTop: '1px' }}>{log.부품종류}</div>
                         </div>
                         <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontSize: '0.85rem', fontWeight: 800, color: isOut ? '#dc2626' : '#16a34a' }}>
+                          <div style={{ fontSize: '0.9rem', fontWeight: 800, color: isOut ? '#dc2626' : '#16a34a' }}>
                             {isOut ? '' : '+'}{log.변경수량}
                           </div>
                           <div style={{ fontSize: '0.65rem', color: '#9ca3af' }}>
@@ -2209,7 +2280,7 @@ function FacilityDashboardPage({ facilityName, inventoryData, onBack, onUpdate, 
                         </div>
                       </div>
                       {log.user && (
-                        <div style={{ marginTop: '4px', fontSize: '0.65rem', color: '#9ca3af' }}>👤 {log.user}</div>
+                        <div style={{ marginTop: '6px', fontSize: '0.65rem', color: '#9ca3af' }}>👤 {log.user}</div>
                       )}
                     </div>
                   );
