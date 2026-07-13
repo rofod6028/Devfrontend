@@ -398,6 +398,16 @@ function App() {
   };
 
   // ============================================================
+  // 로그아웃 — 저장된 사번 인증 정보를 지우고 새로고침(재인증 유도)
+  // ============================================================
+  const handleLogout = () => {
+    if (window.confirm(`${userName}님, 로그아웃하시겠습니까?`)) {
+      localStorage.removeItem('inventory_user');
+      window.location.reload();
+    }
+  };
+
+  // ============================================================
   // 알림 항목 → 해당 부품으로 바로 이동 (공통 시트 전체 목록에서 하이라이트)
   // ============================================================
   const navigateToItem = (item) => {
@@ -724,6 +734,14 @@ function App() {
               <line x1="6" y1="20" x2="6" y2="14" />
             </svg>
             전체 요약
+          </button>
+          <button className="nav-btn logout-btn" onClick={handleLogout} title="로그아웃">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+            로그아웃
           </button>
         </div>
       </header>
@@ -1575,30 +1593,25 @@ function LogsPage({ onBack, inventoryData, facilityLists }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [offset, setOffset] = useState(0);
   const [total, setTotal] = useState(0);
-  const [filterFacility, setFilterFacility] = useState('');
-  const [filterPartType, setFilterPartType] = useState('');
+  const [searchQuery, setSearchQuery] = useState(''); // ✨ 설비명/모델명/부품종류 통합 검색어
   const LIMIT = 50;
 
-  // 설비 필터 옵션 = 전체 설비 목록(충전+타정, 로그에는 실제사용설비명이 기록되므로)
-  const facilityOptions = [...new Set(
-    (facilityLists?.all || []).filter(Boolean)
-  )].sort();
-  const partTypeOptions = [...new Set(
-    (inventoryData || []).map(i => i.부품종류).filter(Boolean)
-  )].sort();
-
+  // 검색어 입력 중 과도한 요청을 막기 위한 디바운스
   useEffect(() => {
-    setLogs([]);
-    setOffset(0);
-    fetchLogs(0, true);
-  }, [filterFacility, filterPartType]);
+    const timer = setTimeout(() => {
+      setLogs([]);
+      setOffset(0);
+      fetchLogs(0, true, searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery]);
 
-  async function fetchLogs(offsetVal, reset = false) {
+  async function fetchLogs(offsetVal, reset = false, q = searchQuery) {
     try {
       reset ? setLoading(true) : setLoadingMore(true);
       const params = new URLSearchParams({ limit: LIMIT, offset: offsetVal });
-      if (filterFacility) params.append('facility', filterFacility);
-      if (filterPartType) params.append('partType', filterPartType);
+      if (q && q.trim()) params.append('q', q.trim());
       const res = await axios.get(`${BASE_URL}/inventory/logs?${params}`);
       const newLogs = res.data.data;
       setTotal(res.data.total);
@@ -1614,7 +1627,7 @@ function LogsPage({ onBack, inventoryData, facilityLists }) {
 
   const handleLoadMore = () => fetchLogs(offset);
 
-  if (loading) return <div className="loading-spinner"><div className="spinner"></div><p>로드 중...</p></div>;
+  if (loading && logs.length === 0) return <div className="loading-spinner"><div className="spinner"></div><p>로드 중...</p></div>;
 
   const inLogs  = logs.filter(l => l.action === '입고');
   const outLogs = logs.filter(l => l.action === '출고');
@@ -1657,30 +1670,17 @@ function LogsPage({ onBack, inventoryData, facilityLists }) {
         <h2>재고 변경 이력</h2>
       </div>
 
-      {/* 필터 영역 */}
+      {/* 검색 영역 — 설비명 / 모델명 / 부품종류 통합 검색 */}
       <div className="logs-filter-bar">
-        <select
-          className="logs-filter-select"
-          value={filterFacility}
-          onChange={e => setFilterFacility(e.target.value)}
-        >
-          <option value="">전체 설비</option>
-          {facilityOptions.map(f => (
-            <option key={f} value={f}>{f}</option>
-          ))}
-        </select>
-        <select
-          className="logs-filter-select"
-          value={filterPartType}
-          onChange={e => setFilterPartType(e.target.value)}
-        >
-          <option value="">전체 부품종류</option>
-          {partTypeOptions.map(p => (
-            <option key={p} value={p}>{p}</option>
-          ))}
-        </select>
-        {(filterFacility || filterPartType) && (
-          <button className="logs-filter-clear" onClick={() => { setFilterFacility(''); setFilterPartType(''); }}>
+        <input
+          type="text"
+          className="logs-search-input"
+          placeholder="🔍 설비명 또는 부품 모델명으로 검색..."
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+        />
+        {searchQuery && (
+          <button className="logs-filter-clear" onClick={() => setSearchQuery('')}>
             ✕ 초기화
           </button>
         )}
@@ -2315,7 +2315,7 @@ function FacilityDashboardPage({ facilityName, inventoryData, onBack, onUpdate, 
                 <div style={{ background: '#fff', borderRadius: '12px', padding: '11px 10px', boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
                   <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#1a1f2e', marginBottom: '4px', lineHeight: 1.3 }}>
                     📆 월별 추이
-                    <span style={{ fontSize: '0.62rem', color: '#9ca3af', fontWeight: 400, marginLeft: '4px' }}>최근 6개월</span>
+                         <span style={{ fontSize: '0.62rem', color: '#9ca3af', fontWeight: 400, marginLeft: '4px' }}>최근 6개월</span>
                   </div>
                   {top3Models.length > 0 && (
                     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
